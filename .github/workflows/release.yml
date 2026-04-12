@@ -71,6 +71,7 @@ jobs:
 
       - name: Package artifacts (Windows)
         if: runner.os == 'Windows'
+        shell: bash
         env:
           BUILD_TARGET: ${{ matrix.target }}
           ARTIFACT_NAME: ${{ matrix.artifact }}
