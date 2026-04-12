@@ -4,5 +4,7 @@
 *.swo
 .DS_Store
 .worktrees/
-.cargo/
+# .cargo/ — track config.toml (xtask alias), ignore the rest
+.cargo/*
+!.cargo/config.toml
 .superpowers/
