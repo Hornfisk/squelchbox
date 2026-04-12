@@ -3,6 +3,8 @@
 //! Tuned for short, dense ambient room character. No cathedral tails.
 //! Comb delay lengths are mutually prime to avoid coloring.
 
+use crate::dsp::flush_denormal;
+
 /// Comb filter delay lengths at 48 kHz. Mutually prime.
 const COMB_DELAYS_48K: [usize; 4] = [1117, 1188, 1277, 1356];
 
@@ -51,7 +53,7 @@ impl CombFilter {
     #[inline]
     fn process(&mut self, input: f32) -> f32 {
         let out = self.buffer[self.pos];
-        self.buffer[self.pos] = input + out * self.feedback;
+        self.buffer[self.pos] = flush_denormal(input + out * self.feedback);
         self.pos = (self.pos + 1) % self.len;
         out
     }
@@ -85,7 +87,7 @@ impl AllpassFilter {
     fn process(&mut self, input: f32) -> f32 {
         let delayed = self.buffer[self.pos];
         let node = input - AP_COEFF * delayed;
-        self.buffer[self.pos] = node;
+        self.buffer[self.pos] = flush_denormal(node);
         self.pos = (self.pos + 1) % self.len;
         delayed + AP_COEFF * node
     }

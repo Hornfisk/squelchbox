@@ -10,9 +10,13 @@
 
 use nih_plug::prelude::*;
 
+mod dsp;
+mod kbd;
 mod logging;
 mod params;
 mod plugin;
+mod sequencer;
+mod ui;
 mod util;
 
 pub use plugin::SquelchBox;

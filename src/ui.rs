@@ -7,6 +7,7 @@
 use nih_plug::prelude::*;
 use nih_plug_egui::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 use nih_plug_egui::{create_egui_editor, EguiState};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::kbd::{key_to_semitone, KbdEvent, KbdQueue};
@@ -75,6 +76,118 @@ const TOGGLE_H: f32 = 14.0;
 const FX_KNOB_R: f32 = 14.0;
 const ANIM_SPEED: f32 = 1.0 / 0.15; // fully open/close in ~150ms
 
+// ─── Toast overlay ───────────────────────────────────────────────────
+
+/// Transient notification shown after MIDI export. Stored in egui temp
+/// data so it survives across frames without any editor-state struct.
+#[derive(Clone)]
+struct Toast {
+    message: String,
+    path: PathBuf,
+    frame_born: u64,
+}
+
+const TOAST_LIFETIME: u64 = 600; // ~10s at 60fps
+const TOAST_FADE_START: u64 = 510; // fade over last ~1.5s
+
+fn draw_toast(ui: &mut egui::Ui, rect: Rect) {
+    let frame_id = egui::Id::new("sqb_frame");
+    let toast_id = egui::Id::new("sqb_toast");
+
+    let frame: u64 = ui.ctx().data(|d| d.get_temp(frame_id)).unwrap_or(0);
+    ui.ctx().data_mut(|d| d.insert_temp(frame_id, frame + 1));
+
+    let toast: Option<Toast> = ui.ctx().data(|d| d.get_temp(toast_id));
+    let Some(toast) = toast else { return };
+
+    let age = frame.saturating_sub(toast.frame_born);
+    if age > TOAST_LIFETIME {
+        ui.ctx().data_mut(|d| d.remove::<Toast>(toast_id));
+        return;
+    }
+
+    let alpha = if age > TOAST_FADE_START {
+        ((TOAST_LIFETIME - age) as f32 / (TOAST_LIFETIME - TOAST_FADE_START) as f32 * 255.0) as u8
+    } else {
+        255
+    };
+
+    let path_str = toast.path.display().to_string();
+    let msg = &toast.message;
+
+    // Toast bar: centred horizontally, 24px above bottom
+    let bar_w = 500.0f32.min(rect.width() - 20.0);
+    let bar_h = 32.0;
+    let bar_x = rect.left() + (rect.width() - bar_w) * 0.5;
+    let bar_y = rect.bottom() - bar_h - 24.0;
+    let bar = Rect::from_min_size(Pos2::new(bar_x, bar_y), Vec2::new(bar_w, bar_h));
+
+    let bg = Color32::from_rgba_unmultiplied(30, 30, 36, (200.0 * alpha as f32 / 255.0) as u8);
+    let fg = Color32::from_rgba_unmultiplied(232, 232, 236, alpha);
+    let action_col = Color32::from_rgba_unmultiplied(80, 200, 80, alpha);
+    let font = egui::FontId::new(8.5, egui::FontFamily::Monospace);
+
+    let p = ui.painter();
+    p.rect_filled(bar, 4.0, bg);
+
+    // Message text (left-aligned, truncated)
+    let text_x = bar.left() + 8.0;
+    let text_max_w = bar.width() - 120.0; // leave room for buttons
+    let mut text = msg.clone();
+    // Crude truncation — measure galley width
+    let galley = p.layout_no_wrap(text.clone(), font.clone(), fg);
+    if galley.size().x > text_max_w {
+        // Truncate path portion, keep prefix
+        let prefix = "Exported: ...";
+        let filename = toast.path.file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_default();
+        text = format!("{prefix}/{filename}");
+    }
+    p.text(
+        Pos2::new(text_x, bar.center().y),
+        egui::Align2::LEFT_CENTER,
+        &text,
+        font.clone(),
+        fg,
+    );
+
+    // [OPEN] button
+    let open_r = Rect::from_min_size(
+        Pos2::new(bar.right() - 108.0, bar.top() + 4.0),
+        Vec2::new(48.0, bar_h - 8.0),
+    );
+    let open_resp = ui.interact(open_r, egui::Id::new("sqb_toast_open"), egui::Sense::click())
+        .on_hover_cursor(egui::CursorIcon::PointingHand);
+    p.text(open_r.center(), egui::Align2::CENTER_CENTER, "[OPEN]", font.clone(), action_col);
+    if open_resp.clicked() {
+        if let Some(dir) = toast.path.parent() {
+            let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
+        }
+    }
+
+    // [COPY] button
+    let copy_r = Rect::from_min_size(
+        Pos2::new(bar.right() - 54.0, bar.top() + 4.0),
+        Vec2::new(48.0, bar_h - 8.0),
+    );
+    let copy_resp = ui.interact(copy_r, egui::Id::new("sqb_toast_copy"), egui::Sense::click())
+        .on_hover_cursor(egui::CursorIcon::PointingHand);
+    p.text(copy_r.center(), egui::Align2::CENTER_CENTER, "[COPY]", font, action_col);
+    if copy_resp.clicked() {
+        ui.ctx().copy_text(path_str);
+    }
+}
+
+fn set_toast(ctx: &egui::Context, message: String, path: PathBuf) {
+    let frame: u64 = ctx.data(|d| d.get_temp(egui::Id::new("sqb_frame"))).unwrap_or(0);
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("sqb_toast"), Toast {
+        message,
+        path,
+        frame_born: frame,
+    }));
+}
+
 // ─── Entry point ──────────────────────────────────────────────────────
 
 pub fn create(
@@ -102,6 +215,7 @@ pub fn create(
                     draw_band2(ui, setter, &params, &kbd, rect);
                     draw_fx_time(ui, setter, &params, rect);
                     draw_lower_panel(ui, setter, &params, &kbd, rect);
+                    draw_toast(ui, rect);
                 });
         },
     )
@@ -177,11 +291,13 @@ fn handle_keyboard(ctx: &egui::Context, kbd: &KbdQueue) {
     let edit_mode = kbd.selected_step().is_some();
     for key in cur.difference(&prev) {
         kbd.mark_key(&format!("{key:?}"));
-        // When a step is selected, swallow the edit-mode keys so they
-        // don't double-trigger as note input. draw_step_area handles
-        // the actual edit via egui's key_pressed in the same frame.
-        if edit_mode
-            && matches!(
+
+        // ── Edit mode: step is selected ──
+        // Arrow/A/S/R/Esc are handled by draw_step_area via key_pressed.
+        // Note keys write pitch onto the selected step + audition.
+        // T triggers/previews the selected step.
+        if edit_mode {
+            if matches!(
                 key,
                 egui::Key::ArrowUp
                     | egui::Key::ArrowDown
@@ -193,10 +309,38 @@ fn handle_keyboard(ctx: &egui::Context, kbd: &KbdQueue) {
                     | egui::Key::Delete
                     | egui::Key::Backspace
                     | egui::Key::Escape
-            )
-        {
-            continue;
+            ) {
+                continue;
+            }
+            // T = trigger/preview the selected step's note
+            if *key == egui::Key::T {
+                if let Some(sel) = kbd.selected_step() {
+                    let pat = kbd.pattern_snapshot();
+                    let s = pat.steps[sel];
+                    if !s.rest {
+                        let velocity = if s.accent { 0.95 } else { 0.7 };
+                        kbd.push(KbdEvent { on: true, note: s.semitone, velocity });
+                    }
+                }
+                continue;
+            }
+            // Note keys: write pitch onto selected step + audition
+            if let Some(semi) = key_to_semitone(*key) {
+                if let Some(sel) = kbd.selected_step() {
+                    let base = 12 * (kbd.octave() as i32 + 1);
+                    let note = (base + semi).clamp(24, 60) as u8;
+                    kbd.edit_pattern(|p| {
+                        p.steps[sel].semitone = note;
+                        p.steps[sel].rest = false;
+                    });
+                    let velocity = if shift { 0.95 } else { 0.7 };
+                    kbd.push(KbdEvent { on: true, note, velocity });
+                }
+                continue;
+            }
+            // Fall through to global shortcuts (P/Space/Enter/brackets/etc.)
         }
+
         match key {
             egui::Key::ArrowDown => { let o = kbd.octave(); kbd.set_octave(o - 1); }
             egui::Key::ArrowUp   => { let o = kbd.octave(); kbd.set_octave(o + 1); }
@@ -206,6 +350,7 @@ fn handle_keyboard(ctx: &egui::Context, kbd: &KbdQueue) {
             egui::Key::CloseBracket => { kbd.edit_pattern(|p| p.rotate_right(1)); }
             egui::Key::Backtick => { randomize_pattern(ctx, kbd); }
             _ => {
+                // No step selected: note keys trigger live MIDI
                 if let Some(semi) = key_to_semitone(*key) {
                     let base = 12 * (kbd.octave() as i32 + 1);
                     let note = (base + semi).clamp(0, 127) as u8;
@@ -215,7 +360,47 @@ fn handle_keyboard(ctx: &egui::Context, kbd: &KbdQueue) {
             }
         }
     }
-    ctx.data_mut(|d| d.insert_temp(prev_id, cur));
+    // ── T-held tracking for audition-while-scrubbing ──
+    //
+    // Goal: detect "user is holding T" so draw_step_area can audition
+    // pitch changes from arrow keys.
+    //
+    // Problem: on XWayland/baseview, pressing Shift while T is held
+    // causes T to vanish from keys_down AND generates a false
+    // Event::Key { T, pressed: false }. Both data sources lie about
+    // T being released.
+    //
+    // Strategy — two sources, asymmetric trust:
+    //   SET t_held:   keys_down contains T  OR  Event::Key pressed=true
+    //   CLEAR t_held: keys_down lacks T AND Shift is NOT held
+    //
+    // We never clear based on Event::Key release (unreliable).
+    // We never clear while Shift is held (the false-release window).
+    // We DO clear when keys_down lacks T and Shift is up — that's a
+    // genuine release on a quiescent keyboard.
+    let t_id = egui::Id::new("sqb_t_held");
+    let mut t_held: bool = ctx.data(|d| d.get_temp(t_id)).unwrap_or(false);
+
+    let t_in_keys_down = cur.contains(&egui::Key::T);
+    let t_event_press = ctx.input(|i| {
+        i.events.iter().any(|ev| {
+            matches!(ev, egui::Event::Key { key: egui::Key::T, pressed: true, .. })
+        })
+    });
+
+    if t_in_keys_down || t_event_press {
+        t_held = true;
+    } else if !shift {
+        // T absent from keys_down AND Shift not held → genuine release
+        t_held = false;
+    }
+    // When Shift IS held and T is absent from keys_down, keep
+    // previous t_held state — ride through the false-release glitch.
+
+    ctx.data_mut(|d| {
+        d.insert_temp(prev_id, cur);
+        d.insert_temp(t_id, t_held);
+    });
 }
 
 // ─── Silver + black faceplate ─────────────────────────────────────────
@@ -524,11 +709,6 @@ fn draw_band2(ui: &mut egui::Ui, setter: &ParamSetter, params: &SquelchBoxParams
     let vx   = rect.left() + 724.0;
     let track_x0 = rect.left() + 128.0;
 
-    // Pre-compute display string before any painter borrow.
-    let display = ui.ctx()
-        .data(|d| d.get_temp::<String>(egui::Id::new("sqb_display")))
-        .unwrap_or_else(|| format!("CUT {:.0}Hz", params.cutoff.unmodulated_plain_value()));
-
     // All decorative painting in one scoped block so the immutable borrow
     // of ui ends before the param_knob calls below.
     {
@@ -558,14 +738,6 @@ fn draw_band2(ui: &mut egui::Ui, setter: &ParamSetter, params: &SquelchBoxParams
         p.rect_stroke(mode_rect, 3.0, Stroke::new(1.0, SILVER_SHADOW), egui::StrokeKind::Inside);
         p.text(Pos2::new(mx + 42.0, top + BAND1_BOT + 8.0), egui::Align2::CENTER_TOP,
             "SYNC", egui::FontId::new(7.5, egui::FontFamily::Monospace), INK);
-
-        // LED readout
-        let dr = Rect::from_min_size(Pos2::new(rect.left() + 380.0, top + BAND1_BOT + 78.0), Vec2::new(100.0, 14.0));
-        p.rect_filled(dr.translate(Vec2::new(0.0, 1.0)), 2.0, SILVER_LIGHT);
-        p.rect_filled(dr, 2.0, INSET);
-        p.rect_stroke(dr, 2.0, Stroke::new(0.8, INK), egui::StrokeKind::Inside);
-        p.text(dr.center(), egui::Align2::CENTER_CENTER, &display,
-            egui::FontId::new(9.0, egui::FontFamily::Monospace), INSET_TEXT);
 
         // VOLUME label
         p.text(Pos2::new(vx, lbl_y), egui::Align2::CENTER_TOP,
@@ -683,10 +855,10 @@ fn draw_band2(ui: &mut egui::Ui, setter: &ParamSetter, params: &SquelchBoxParams
         let oct_up = Rect::from_min_size(Pos2::new(px + 4.0, oct_y), Vec2::new(18.0, 10.0));
         let dn_r = ui.interact(oct_dn, egui::Id::new("sqb_oct_dn"), egui::Sense::click())
             .on_hover_cursor(egui::CursorIcon::PointingHand)
-            .on_hover_text("Octave down — selected step −12 semitones.\nKeyboard: Shift+↓");
+            .on_hover_text("Octave down — selected step −12 semitones.\nKeyboard: Shift+Down");
         let up_r = ui.interact(oct_up, egui::Id::new("sqb_oct_up"), egui::Sense::click())
             .on_hover_cursor(egui::CursorIcon::PointingHand)
-            .on_hover_text("Octave up — selected step +12 semitones.\nKeyboard: Shift+↑");
+            .on_hover_text("Octave up — selected step +12 semitones.\nKeyboard: Shift+Up");
         let p = ui.painter();
         p.text(Pos2::new(px - 8.0, oct_y - 2.0), egui::Align2::CENTER_BOTTOM,
             "OCT", egui::FontId::new(6.5, egui::FontFamily::Monospace), SILVER_SHADOW);
@@ -757,6 +929,17 @@ fn draw_band2(ui: &mut egui::Ui, setter: &ParamSetter, params: &SquelchBoxParams
 }
 
 // ─── FX Right Zone: Delay + Reverb panel ────────────────────────────
+//
+// Layout uses three fixed vertical anchors so nothing jumps:
+//
+//   zone_y + 0  : DELAY / REVERB toggles  (always here)
+//   zone_y + 16 : content area (62 px)     branding OR control rows
+//   zone_y + 80 : LED readout             (always here)
+//
+// Knob radius shrinks from FX_KNOB_R to FX_KNOB_SM when both rows
+// need to share the content area.
+
+const FX_KNOB_SM: f32 = 11.0; // compact knob for dual-row mode
 
 fn draw_fx_time(
     ui: &mut egui::Ui,
@@ -775,7 +958,7 @@ fn draw_fx_time(
     let mut progress: f32 = ui.ctx().data(|d| d.get_temp(anim_id)).unwrap_or(0.0);
     let target = if any_on { 1.0 } else { 0.0 };
     if (progress - target).abs() > 0.001 {
-        progress += (target - progress).signum() * dt * (1.0 / 0.2); // 200ms
+        progress += (target - progress).signum() * dt * (1.0 / 0.2);
         progress = progress.clamp(0.0, 1.0);
         ui.ctx().request_repaint();
     } else {
@@ -788,43 +971,18 @@ fn draw_fx_time(
     let zone_y = top + BAND1_BOT + 10.0;
     let zone_w = 250.0;
 
-    // ── Branding (fades out as progress → 1.0) ──
-    if progress < 0.999 {
-        let alpha = ((1.0 - progress) * 255.0) as u8;
-        let brand_ink = Color32::from_rgba_unmultiplied(30, 30, 36, alpha);
-        let brand_sub = Color32::from_rgba_unmultiplied(90, 90, 96, alpha);
-        let p = ui.painter();
-        let name_cx = zone_x + zone_w * 0.5;
-        p.text(
-            Pos2::new(name_cx, zone_y + 18.0),
-            egui::Align2::CENTER_TOP,
-            "SB-303",
-            egui::FontId::new(28.0, egui::FontFamily::Proportional),
-            brand_ink,
-        );
-        p.text(
-            Pos2::new(name_cx, zone_y + 50.0),
-            egui::Align2::CENTER_TOP,
-            "Computer Controlled",
-            egui::FontId::new(10.0, egui::FontFamily::Proportional),
-            brand_sub,
-        );
-    }
-
-    // ── Toggle switches (always visible) ──
-    let toggle_base_y = if any_on { zone_y + 2.0 } else { zone_y + 70.0 };
+    // ── Fixed anchor: toggle row (always at zone_y) ──
+    let toggle_y = zone_y;
 
     // Delay toggle
     let dly_toggle_rect = Rect::from_min_size(
-        Pos2::new(zone_x, toggle_base_y),
+        Pos2::new(zone_x, toggle_y),
         Vec2::new(TOGGLE_W, TOGGLE_H),
     );
-    let dly_toggle_id = egui::Id::new("sqb_delay_toggle");
     let dly_resp = ui
-        .interact(dly_toggle_rect, dly_toggle_id, egui::Sense::click())
+        .interact(dly_toggle_rect, egui::Id::new("sqb_delay_toggle"), egui::Sense::click())
         .on_hover_cursor(egui::CursorIcon::PointingHand)
         .on_hover_text("Delay — tempo-synced echo.\nClick to enable/disable.");
-
     {
         let p = ui.painter();
         let bg = if delay_on { RED } else { Color32::from_rgb(52, 52, 56) };
@@ -832,13 +990,11 @@ fn draw_fx_time(
         let cx = if delay_on { dly_toggle_rect.right() - TOGGLE_H / 2.0 } else { dly_toggle_rect.left() + TOGGLE_H / 2.0 };
         let cc = if delay_on { Color32::WHITE } else { Color32::from_rgb(100, 100, 106) };
         p.circle_filled(Pos2::new(cx, dly_toggle_rect.center().y), 5.0, cc);
-        let lc = if delay_on { RED } else { SILVER_SHADOW };
         p.text(
             Pos2::new(dly_toggle_rect.right() + 4.0, dly_toggle_rect.center().y),
-            egui::Align2::LEFT_CENTER,
-            "DELAY",
+            egui::Align2::LEFT_CENTER, "DELAY",
             egui::FontId::new(7.0, egui::FontFamily::Monospace),
-            lc,
+            if delay_on { RED } else { SILVER_SHADOW },
         );
     }
     if dly_resp.clicked() {
@@ -849,15 +1005,13 @@ fn draw_fx_time(
 
     // Reverb toggle
     let vrb_toggle_rect = Rect::from_min_size(
-        Pos2::new(zone_x + 80.0, toggle_base_y),
+        Pos2::new(zone_x + 100.0, toggle_y),
         Vec2::new(TOGGLE_W, TOGGLE_H),
     );
-    let vrb_toggle_id = egui::Id::new("sqb_reverb_toggle");
     let vrb_resp = ui
-        .interact(vrb_toggle_rect, vrb_toggle_id, egui::Sense::click())
+        .interact(vrb_toggle_rect, egui::Id::new("sqb_reverb_toggle"), egui::Sense::click())
         .on_hover_cursor(egui::CursorIcon::PointingHand)
         .on_hover_text("Reverb — ambient room.\nClick to enable/disable.");
-
     {
         let p = ui.painter();
         let bg = if reverb_on { RED } else { Color32::from_rgb(52, 52, 56) };
@@ -865,13 +1019,11 @@ fn draw_fx_time(
         let cx = if reverb_on { vrb_toggle_rect.right() - TOGGLE_H / 2.0 } else { vrb_toggle_rect.left() + TOGGLE_H / 2.0 };
         let cc = if reverb_on { Color32::WHITE } else { Color32::from_rgb(100, 100, 106) };
         p.circle_filled(Pos2::new(cx, vrb_toggle_rect.center().y), 5.0, cc);
-        let lc = if reverb_on { RED } else { SILVER_SHADOW };
         p.text(
             Pos2::new(vrb_toggle_rect.right() + 4.0, vrb_toggle_rect.center().y),
-            egui::Align2::LEFT_CENTER,
-            "REVERB",
+            egui::Align2::LEFT_CENTER, "REVERB",
             egui::FontId::new(7.0, egui::FontFamily::Monospace),
-            lc,
+            if reverb_on { RED } else { SILVER_SHADOW },
         );
     }
     if vrb_resp.clicked() {
@@ -880,14 +1032,61 @@ fn draw_fx_time(
         setter.end_set_parameter(&params.reverb_enable);
     }
 
-    // ── Control rows (fade in as progress → 1.0) ──
+    // Separator line below toggles
+    ui.painter().line_segment(
+        [Pos2::new(zone_x, toggle_y + TOGGLE_H + 2.0),
+         Pos2::new(zone_x + 200.0, toggle_y + TOGGLE_H + 2.0)],
+        Stroke::new(0.5, SILVER_SHADOW),
+    );
+
+    // ── Fixed anchor: LED readout (always at zone_y + 80) ──
+    let led_y = zone_y + 80.0;
+    {
+        let display = ui.ctx()
+            .data(|d| d.get_temp::<String>(egui::Id::new("sqb_display")))
+            .unwrap_or_else(|| format!("CUT {:.0}Hz", params.cutoff.unmodulated_plain_value()));
+        let dr = Rect::from_min_size(Pos2::new(zone_x, led_y), Vec2::new(100.0, 14.0));
+        let p = ui.painter();
+        p.rect_filled(dr.translate(Vec2::new(0.0, 1.0)), 2.0, SILVER_LIGHT);
+        p.rect_filled(dr, 2.0, INSET);
+        p.rect_stroke(dr, 2.0, Stroke::new(0.8, INK), egui::StrokeKind::Inside);
+        p.text(dr.center(), egui::Align2::CENTER_CENTER, &display,
+            egui::FontId::new(9.0, egui::FontFamily::Monospace), INSET_TEXT);
+    }
+
+    // ── Content area: zone_y+18 to zone_y+78 (60px) ──
+    let content_y = zone_y + 18.0;
+    let content_h = 60.0;
+
+    // Branding (fades out)
+    if progress < 0.999 {
+        let alpha = ((1.0 - progress) * 255.0) as u8;
+        let brand_ink = Color32::from_rgba_unmultiplied(30, 30, 36, alpha);
+        let brand_sub = Color32::from_rgba_unmultiplied(90, 90, 96, alpha);
+        let p = ui.painter();
+        let name_cx = zone_x + zone_w * 0.5;
+        p.text(
+            Pos2::new(name_cx, content_y + 4.0),
+            egui::Align2::CENTER_TOP, "SB-303",
+            egui::FontId::new(26.0, egui::FontFamily::Proportional), brand_ink,
+        );
+        p.text(
+            Pos2::new(name_cx, content_y + 34.0),
+            egui::Align2::CENTER_TOP, "Computer Controlled",
+            egui::FontId::new(9.0, egui::FontFamily::Proportional), brand_sub,
+        );
+    }
+
+    // ── Control rows (fade in) ──
     if progress > 0.3 {
-        let row_y = zone_y + 22.0;
+        let both = delay_on && reverb_on;
+        let kr = if both { FX_KNOB_SM } else { FX_KNOB_R };
 
         // ── Delay row ──
         if delay_on {
-            let row_left = zone_x + 36.0;
-            let knob_y = row_y + 2.0;
+            // When solo, center vertically in content area. When both, use top half.
+            let knob_cy = if both { content_y + 14.0 } else { content_y + content_h * 0.5 - 4.0 };
+            let row_left = zone_x;
 
             // Mode button (ANA / CLN)
             let mode_val = params.delay_mode.value();
@@ -896,26 +1095,20 @@ fn draw_fx_time(
                 DelayModeParam::Clean => "CLN",
             };
             let mode_rect = Rect::from_min_size(
-                Pos2::new(row_left, knob_y - 5.0),
+                Pos2::new(row_left, knob_cy - 5.0),
                 Vec2::new(24.0, 12.0),
             );
-            let mode_id = egui::Id::new("sqb_delay_mode_btn");
             let mode_resp = ui
-                .interact(mode_rect, mode_id, egui::Sense::click())
+                .interact(mode_rect, egui::Id::new("sqb_delay_mode_btn"), egui::Sense::click())
                 .on_hover_cursor(egui::CursorIcon::PointingHand)
                 .on_hover_text("Delay mode: Analog (LP feedback) / Clean (pristine).\nClick to toggle.");
             {
                 let p = ui.painter();
-                let is_analog = mode_val == DelayModeParam::Analog;
-                let bg = if is_analog { RED_DARK } else { BTN_FACE };
-                p.rect_filled(mode_rect, 2.0, bg);
-                p.text(
-                    mode_rect.center(),
-                    egui::Align2::CENTER_CENTER,
-                    mode_lbl,
+                let is_ana = mode_val == DelayModeParam::Analog;
+                p.rect_filled(mode_rect, 2.0, if is_ana { RED_DARK } else { BTN_FACE });
+                p.text(mode_rect.center(), egui::Align2::CENTER_CENTER, mode_lbl,
                     egui::FontId::new(6.5, egui::FontFamily::Monospace),
-                    if is_analog { Color32::WHITE } else { BTN_LBL },
-                );
+                    if is_ana { Color32::WHITE } else { BTN_LBL });
             }
             if mode_resp.clicked() {
                 let next = match mode_val {
@@ -927,34 +1120,26 @@ fn draw_fx_time(
                 setter.end_set_parameter(&params.delay_mode);
             }
 
-            // Sync / Feedback / Mix knobs
-            let sync_cx = row_left + 42.0;
-            let fdbk_cx = row_left + 82.0;
-            let mix_cx = row_left + 122.0;
+            // Knob positions
+            let sync_cx = row_left + 50.0;
+            let fdbk_cx = row_left + 90.0;
+            let mix_cx  = row_left + 130.0;
 
             {
                 let p = ui.painter();
                 for (cx, lbl) in [(sync_cx, "SYNC"), (fdbk_cx, "FDBK"), (mix_cx, "MIX")] {
-                    p.text(
-                        Pos2::new(cx, knob_y + FX_KNOB_R + 5.0),
-                        egui::Align2::CENTER_TOP,
-                        lbl,
-                        egui::FontId::new(6.0, egui::FontFamily::Monospace),
-                        INK,
-                    );
+                    p.text(Pos2::new(cx, knob_cy + kr + 3.0), egui::Align2::CENTER_TOP, lbl,
+                        egui::FontId::new(5.5, egui::FontFamily::Monospace), INK);
                 }
             }
 
-            // SYNC — clickable round button that cycles subdivisions
+            // SYNC cycler button
             let sync_rect = Rect::from_center_size(
-                Pos2::new(sync_cx, knob_y),
-                Vec2::new(FX_KNOB_R * 2.0, FX_KNOB_R * 2.0),
-            );
-            let sync_id = egui::Id::new("sqb_delay_sync_btn");
+                Pos2::new(sync_cx, knob_cy), Vec2::new(kr * 2.0, kr * 2.0));
             let sync_resp = ui
-                .interact(sync_rect, sync_id, egui::Sense::click())
+                .interact(sync_rect, egui::Id::new("sqb_delay_sync_btn"), egui::Sense::click())
                 .on_hover_cursor(egui::CursorIcon::PointingHand)
-                .on_hover_text("Delay sync subdivision.\nClick to cycle: 1/4 → 1/8 → 1/8d → 1/16 → 1/8t");
+                .on_hover_text("Delay sync subdivision.\nClick to cycle: 1/4 Right 1/8 Right 1/8d Right 1/16 Right 1/8t");
             {
                 let cur = params.delay_sync.value();
                 let lbl = match cur {
@@ -965,15 +1150,10 @@ fn draw_fx_time(
                     DelaySyncParam::TripletEighth => "1/8t",
                 };
                 let p = ui.painter();
-                p.rect_filled(sync_rect, FX_KNOB_R, KNOB_CORE);
-                p.rect_stroke(sync_rect, FX_KNOB_R, Stroke::new(2.0, KNOB_RING), egui::StrokeKind::Outside);
-                p.text(
-                    sync_rect.center(),
-                    egui::Align2::CENTER_CENTER,
-                    lbl,
-                    egui::FontId::new(8.0, egui::FontFamily::Monospace),
-                    INDICATOR,
-                );
+                p.rect_filled(sync_rect, kr, KNOB_CORE);
+                p.rect_stroke(sync_rect, kr, Stroke::new(2.0, KNOB_RING), egui::StrokeKind::Outside);
+                p.text(sync_rect.center(), egui::Align2::CENTER_CENTER, lbl,
+                    egui::FontId::new(if both { 6.5 } else { 8.0 }, egui::FontFamily::Monospace), INDICATOR);
             }
             if sync_resp.clicked() {
                 let next = match params.delay_sync.value() {
@@ -988,86 +1168,50 @@ fn draw_fx_time(
                 setter.end_set_parameter(&params.delay_sync);
             }
 
-            param_knob(
-                ui, setter,
-                egui::Id::new("sqb_delay_fdbk"),
-                &params.delay_feedback,
-                Pos2::new(fdbk_cx, knob_y),
-                FX_KNOB_R,
-                "FDBK",
-                |v| format!("{:.0}%", v * 100.0),
-                false,
-            )
-            .on_hover_text("Feedback — repeat intensity (0–90%).\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
+            param_knob(ui, setter, egui::Id::new("sqb_delay_fdbk"),
+                &params.delay_feedback, Pos2::new(fdbk_cx, knob_cy), kr,
+                "FDBK", |v| format!("{:.0}%", v * 100.0), false)
+                .on_hover_text("Feedback — repeat intensity (0–90%).\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
 
-            param_knob(
-                ui, setter,
-                egui::Id::new("sqb_delay_mix"),
-                &params.delay_mix,
-                Pos2::new(mix_cx, knob_y),
-                FX_KNOB_R,
-                "MIX",
-                |v| format!("{:.0}%", v * 100.0),
-                false,
-            )
-            .on_hover_text("Delay Mix — dry/wet blend.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
+            param_knob(ui, setter, egui::Id::new("sqb_delay_mix"),
+                &params.delay_mix, Pos2::new(mix_cx, knob_cy), kr,
+                "MIX", |v| format!("{:.0}%", v * 100.0), false)
+                .on_hover_text("Delay Mix — dry/wet blend.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
+        }
+
+        // ── Separator (only when both rows visible) ──
+        if both {
+            let sep_y = content_y + content_h * 0.5;
+            ui.painter().line_segment(
+                [Pos2::new(zone_x, sep_y), Pos2::new(zone_x + 160.0, sep_y)],
+                Stroke::new(0.5, SILVER_SHADOW),
+            );
         }
 
         // ── Reverb row ──
         if reverb_on {
-            let row_y2 = row_y + 42.0;
-            let row_left = zone_x + 36.0;
-            let decay_cx = row_left + 42.0;
-            let mix_cx = row_left + 82.0;
-
-            // Separator
-            if delay_on {
-                let p = ui.painter();
-                p.line_segment(
-                    [
-                        Pos2::new(zone_x + 4.0, row_y2 - 6.0),
-                        Pos2::new(zone_x + zone_w - 4.0, row_y2 - 6.0),
-                    ],
-                    Stroke::new(0.5, SILVER_SHADOW),
-                );
-            }
+            let knob_cy = if both { content_y + content_h - 14.0 } else { content_y + content_h * 0.5 - 4.0 };
+            let row_left = zone_x;
+            let decay_cx = row_left + 50.0;
+            let mix_cx   = row_left + 90.0;
 
             {
                 let p = ui.painter();
                 for (cx, lbl) in [(decay_cx, "DECAY"), (mix_cx, "MIX")] {
-                    p.text(
-                        Pos2::new(cx, row_y2 + FX_KNOB_R + 5.0),
-                        egui::Align2::CENTER_TOP,
-                        lbl,
-                        egui::FontId::new(6.0, egui::FontFamily::Monospace),
-                        INK,
-                    );
+                    p.text(Pos2::new(cx, knob_cy + kr + 3.0), egui::Align2::CENTER_TOP, lbl,
+                        egui::FontId::new(5.5, egui::FontFamily::Monospace), INK);
                 }
             }
 
-            param_knob(
-                ui, setter,
-                egui::Id::new("sqb_reverb_decay"),
-                &params.reverb_decay,
-                Pos2::new(decay_cx, row_y2),
-                FX_KNOB_R,
-                "DECAY",
-                |v| format!("{:.0}%", v * 100.0),
-                false,
-            )
-            .on_hover_text("Reverb Decay — room size / tail length.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
+            param_knob(ui, setter, egui::Id::new("sqb_reverb_decay"),
+                &params.reverb_decay, Pos2::new(decay_cx, knob_cy), kr,
+                "DECAY", |v| format!("{:.0}%", v * 100.0), false)
+                .on_hover_text("Reverb Decay — room size / tail length.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
 
-            param_knob(
-                ui, setter,
-                egui::Id::new("sqb_reverb_mix"),
-                &params.reverb_mix,
-                Pos2::new(mix_cx, row_y2),
-                FX_KNOB_R,
-                "MIX",
-                |v| format!("{:.0}%", v * 100.0),
-                false,
-            )
-            .on_hover_text("Reverb Mix — dry/wet blend.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
+            param_knob(ui, setter, egui::Id::new("sqb_reverb_mix"),
+                &params.reverb_mix, Pos2::new(mix_cx, knob_cy), kr,
+                "MIX", |v| format!("{:.0}%", v * 100.0), false)
+                .on_hover_text("Reverb Mix — dry/wet blend.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
         }
     }
 }
@@ -1286,8 +1430,8 @@ fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
              • Right-click body: toggle rest\n\
              • A / S / R buttons above: toggle accent/slide/rest\n\
              • Keyboard (while selected):\n  \
-               ↑/↓ pitch ±1 (Shift ±12)\n  \
-               ←/→ move selection\n  \
+               Up/Down pitch ±1 (Shift ±12)\n  \
+               Left/Right move selection\n  \
                A accent  S slide  R rest\n  \
                Esc deselect",
             i + 1, note_name, flags
@@ -1366,6 +1510,7 @@ fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
     // ─── Keyboard-driven edits on the selected step ───
     if let Some(sel) = selected {
         if sel < 16 {
+            let t_held: bool = ui.ctx().data(|d| d.get_temp(egui::Id::new("sqb_t_held"))).unwrap_or(false);
             let (dp, nav, toggle_a, toggle_s, toggle_r, esc) = ui.input(|ip| {
                 let shift = ip.modifiers.shift;
                 let big = if shift { 12 } else { 1 };
@@ -1384,14 +1529,21 @@ fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
                 )
             });
             if dp != 0 {
-                let cur = pattern.steps[sel].semitone as i32;
+                // If the step is a rest, start from middle C2 (36)
+                let cur = if pattern.steps[sel].rest { 36 } else { pattern.steps[sel].semitone as i32 };
                 let next = (cur + dp).clamp(SEMI_LO as i32, SEMI_HI as i32);
                 pattern.steps[sel].semitone = next as u8;
                 pattern.steps[sel].rest = false;
                 pattern_dirty = true;
+                // T held + pitch change: auto-audition the new note
+                if t_held {
+                    let velocity = if pattern.steps[sel].accent { 0.95 } else { 0.7 };
+                    kbd.push(KbdEvent { on: true, note: next as u8, velocity });
+                }
             }
             if nav != 0 {
-                let next = ((sel as i32 + nav).rem_euclid(16)) as usize;
+                let len = pattern.length.max(1) as i32;
+                let next = ((sel as i32 + nav).rem_euclid(len)) as usize;
                 kbd.set_selected_step(next);
             }
             if toggle_a {
@@ -1496,7 +1648,9 @@ fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
             );
         }
 
-        // Playhead highlight
+        // Single step indicator — never two rings at once.
+        // Running: white ring on the playing step.
+        // Stopped: red ring on the selected step (or playhead if no selection).
         if running && i == playhead {
             let ph = Rect::from_min_size(
                 Pos2::new(cx - STEP_CELL * 0.5 + 1.0, top + SLD_Y0 - 12.0),
@@ -1507,15 +1661,15 @@ fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
                 [Pos2::new(ph.left(), ph.top() - 1.0), Pos2::new(ph.right(), ph.top() - 1.0)],
                 Stroke::new(1.2, Color32::WHITE),
             );
-        }
-
-        // Selection ring (yellow, distinct from white playhead)
-        if selected == Some(i) {
-            let sr = Rect::from_min_size(
-                Pos2::new(cx - STEP_CELL * 0.5 + 2.0, top + SLD_Y0 - 14.0),
-                Vec2::new(STEP_CELL - 4.0, slider_h + 20.0),
-            );
-            p.rect_stroke(sr, 2.5, Stroke::new(1.5, YELLOW), egui::StrokeKind::Outside);
+        } else if !running {
+            let stopped_pos = selected.unwrap_or(playhead);
+            if i == stopped_pos {
+                let sr = Rect::from_min_size(
+                    Pos2::new(cx - STEP_CELL * 0.5 + 1.0, top + SLD_Y0 - 12.0),
+                    Vec2::new(STEP_CELL - 2.0, slider_h + 16.0),
+                );
+                p.rect_stroke(sr, 2.0, Stroke::new(1.5, Color32::from_rgb(180, 60, 60)), egui::StrokeKind::Outside);
+            }
         }
 
         // Step number
@@ -1706,13 +1860,27 @@ fn draw_right_strip(
 
     let btn_w = rect.right() - x0 - 10.0;
 
-    // ── BACK (rewind) ──
+    // ── BACK (move selection backward) ──
     let back_r = Rect::from_min_size(Pos2::new(x0 + 5.0, panel_top + 5.0), Vec2::new(btn_w, 18.0));
     let back_resp = ui.interact(back_r, egui::Id::new("sqb_back"), egui::Sense::click())
         .on_hover_cursor(egui::CursorIcon::PointingHand)
-        .on_hover_text("Back / Rewind — jump the playhead back to step 1.\nShortcut: Enter");
+        .on_hover_text("Back — move the editing selection backward by one step.\nWhile stopped, also auditions the step.");
     paint_right_btn(ui.painter(), back_r, "◀ BACK", false);
-    if back_resp.clicked() { kbd.request_rewind(); }
+    if back_resp.clicked() && !kbd.is_seq_running() {
+        let pat = kbd.pattern_snapshot();
+        let len = pat.length.max(1) as usize;
+        // Derive position from selection if active, otherwise from playhead
+        let cur = kbd.selected_step()
+            .unwrap_or_else(|| (kbd.current_step() % len as u64) as usize);
+        let prev = if cur == 0 { len - 1 } else { cur - 1 };
+        kbd.set_selected_step(prev);
+        kbd.set_current_step(prev as u64);
+        let s = pat.steps[prev];
+        if !s.rest {
+            let velocity = if s.accent { 0.95 } else { 0.7 };
+            kbd.push(crate::kbd::KbdEvent { on: true, note: s.semitone, velocity });
+        }
+    }
 
     // ── STEP (single-step audition while stopped) ──
     let step_r = Rect::from_min_size(Pos2::new(x0 + 5.0, panel_top + 30.0), Vec2::new(btn_w, 20.0));
@@ -1730,12 +1898,19 @@ fn draw_right_strip(
         .on_hover_cursor(egui::CursorIcon::PointingHand)
         .on_hover_text("Write / Next — move the editing selection forward by one step.");
     paint_right_btn(ui.painter(), wn_r, "WRITE/NEXT", false);
-    if wn_resp.clicked() {
-        let next = match kbd.selected_step() {
-            Some(i) => (i + 1) % 16,
-            None => 0,
-        };
+    if wn_resp.clicked() && !kbd.is_seq_running() {
+        let pat = kbd.pattern_snapshot();
+        let len = pat.length.max(1) as usize;
+        let cur = kbd.selected_step()
+            .unwrap_or_else(|| (kbd.current_step() % len as u64) as usize);
+        let next = (cur + 1) % len;
         kbd.set_selected_step(next);
+        kbd.set_current_step(next as u64);
+        let s = pat.steps[next];
+        if !s.rest {
+            let velocity = if s.accent { 0.95 } else { 0.7 };
+            kbd.push(crate::kbd::KbdEvent { on: true, note: s.semitone, velocity });
+        }
     }
 
     // ── TAP (tap tempo) ──
@@ -1762,8 +1937,15 @@ fn draw_right_strip(
         let snap = kbd.pattern_snapshot();
         let bpm = params.seq_bpm.unmodulated_plain_value();
         match crate::util::midi_export::export_pattern(&snap, bpm) {
-            Ok(path) => tracing::info!("MIDI export: {}", path.display()),
-            Err(e) => tracing::warn!("MIDI export failed: {e}"),
+            Ok(path) => {
+                tracing::info!("MIDI export: {}", path.display());
+                let msg = format!("Exported: {}", path.display());
+                set_toast(ui.ctx(), msg, path);
+            }
+            Err(e) => {
+                tracing::warn!("MIDI export failed: {e}");
+                set_toast(ui.ctx(), format!("Export failed: {e}"), PathBuf::new());
+            }
         }
     }
 }
@@ -1777,23 +1959,22 @@ fn paint_right_btn(p: &egui::Painter, r: Rect, label: &str, active: bool) {
         if active { Color32::WHITE } else { BTN_LBL });
 }
 
-/// STEP button: while the sequencer is stopped, advance the playhead by
-/// one step and audition the note at that pattern position by pushing
-/// a synthetic key event through the same queue the QWERTY keyboard
-/// uses. The audio thread picks it up next block and triggers the voice
-/// — no extra DSP plumbing needed.
+/// STEP button: select the current step and audition it without
+/// advancing. Use NEXT/BACK to move, STEP to listen.
 fn single_step_audition(kbd: &KbdQueue) {
     let pat = kbd.pattern_snapshot();
-    let len = pat.length.max(1) as u64;
-    let next_abs = kbd.current_step().wrapping_add(1);
-    kbd.set_current_step(next_abs);
-    let idx = (next_abs % len) as usize;
+    let len = pat.length.max(1) as usize;
+    let idx = kbd.selected_step()
+        .unwrap_or_else(|| (kbd.current_step() % len as u64) as usize);
+    kbd.set_selected_step(idx);
+    kbd.set_current_step(idx as u64);
     let s = pat.steps[idx];
     if !s.rest {
         let velocity = if s.accent { 0.95 } else { 0.7 };
         kbd.push(crate::kbd::KbdEvent { on: true, note: s.semitone, velocity });
     }
 }
+
 
 /// TAP button: store recent tap timestamps in egui temp data, average
 /// the intervals (rejecting any > 2s as a streak break), and write the

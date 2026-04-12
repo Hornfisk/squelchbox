@@ -4,6 +4,8 @@
 //! from BPM + sync subdivision. Two modes: Clean (pristine repeats) and
 //! Analog (one-pole LP in the feedback path, each repeat loses HF).
 
+use crate::dsp::flush_denormal;
+
 /// Maximum delay buffer: 2 seconds at 96 kHz.
 const MAX_DELAY_SAMPLES: usize = 192_000;
 
@@ -102,6 +104,7 @@ impl Delay {
             DelayMode::Clean => delayed,
             DelayMode::Analog => {
                 self.feedback_lp_z += self.feedback_lp_coeff * (delayed - self.feedback_lp_z);
+                self.feedback_lp_z = flush_denormal(self.feedback_lp_z);
                 self.feedback_lp_z
             }
         };
