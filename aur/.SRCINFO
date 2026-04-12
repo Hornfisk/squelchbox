@@ -21,6 +21,6 @@ pkgbase = squelchbox
 	depends = jack2
 	options = !lto
 	source = squelchbox-0.1.0.tar.gz::https://github.com/Hornfisk/squelchbox/archive/refs/tags/v0.1.0.tar.gz
-	sha256sums = SKIP
+	sha256sums = fa95d2a56f78f1415d13e7af1e87ab3d37dc3beb82114b8f07e9df56417aa0b0
 
 pkgname = squelchbox
