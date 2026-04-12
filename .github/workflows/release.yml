@@ -1,0 +1,133 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            artifact: squelchbox-linux-x86_64
+          - os: macos-14
+            target: aarch64-apple-darwin
+            artifact: squelchbox-macos-arm64
+          - os: macos-15
+            target: x86_64-apple-darwin
+            artifact: squelchbox-macos-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: squelchbox-windows-x86_64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config cmake \
+            libx11-dev libx11-xcb-dev libxcb1-dev libxcb-icccm4-dev libxcb-keysyms1-dev \
+            libxcursor-dev libxkbcommon-dev libgl-dev libasound2-dev libjack-dev
+
+      - name: Bundle plugins
+        shell: bash
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+        run: cargo xtask bundle squelchbox --release --target "$BUILD_TARGET"
+
+      - name: Package artifacts (Unix)
+        if: runner.os != 'Windows'
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+          ARTIFACT_NAME: ${{ matrix.artifact }}
+        run: |
+          mkdir -p staging
+          cp -r target/bundled/squelchbox.vst3 staging/
+          cp -r target/bundled/squelchbox.clap staging/
+          cp "target/${BUILD_TARGET}/release/squelchbox-standalone" staging/ || true
+          cp install.sh staging/
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            cp scripts/squelchbox-macos.sh staging/
+          fi
+          cd staging && tar czf "../${ARTIFACT_NAME}.tar.gz" * && cd ..
+
+      - name: Package artifacts (Windows)
+        if: runner.os == 'Windows'
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+          ARTIFACT_NAME: ${{ matrix.artifact }}
+        run: |
+          mkdir -p staging
+          cp -r target/bundled/squelchbox.vst3 staging/
+          cp -r target/bundled/squelchbox.clap staging/
+          cp "target/${BUILD_TARGET}/release/squelchbox-standalone.exe" staging/ || true
+          cp install.bat staging/
+          cd staging && 7z a "../${ARTIFACT_NAME}.zip" * && cd ..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.*
+
+  checksums:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate SHA-256 checksums
+        run: |
+          cd artifacts
+          find . -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec mv {} . \;
+          sha256sum *.tar.gz *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHA256SUMS
+          path: artifacts/SHA256SUMS.txt
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: checksums
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release files
+        run: |
+          mkdir release
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name 'SHA256SUMS.txt' \) -exec mv {} release/ \;
+          ls -lh release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release/*

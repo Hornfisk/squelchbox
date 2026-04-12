@@ -24,28 +24,81 @@ Built with Rust, [nih-plug](https://github.com/robbert-vdh/nih-plug), and egui.
 
 Coming soon.
 
-## Screenshot
+## Install (prebuilt binaries)
 
-The UI is a faithful recreation of the TB-303 front panel, rendered in egui with a brushed-metal faceplate, interactive knobs (drag to adjust, shift+drag for fine control, ctrl-click to reset), animated FX compartments, and a 16-step pitch slider grid with A/S/R (accent/slide/rest) toggles per step.
+Download the latest release for your platform from the [Releases](https://github.com/Hornfisk/squelchbox/releases) page.
 
-## Build
+Each archive contains VST3, CLAP, and standalone binaries plus an install script.
 
-Requires Rust nightly or stable 1.75+.
+### Linux
+
+```bash
+tar xzf squelchbox-linux-x86_64.tar.gz
+./install.sh
+# Rescan plugins in your DAW
+```
+
+Installs to `~/.vst3/`, `~/.clap/`, and `~/.local/bin/`.
+
+### macOS
+
+```bash
+tar xzf squelchbox-macos-arm64.tar.gz   # or macos-x86_64
+./install.sh
+# Rescan plugins in your DAW
+```
+
+Installs to `~/Library/Audio/Plug-Ins/VST3/`, `~/Library/Audio/Plug-Ins/CLAP/`, and `~/.local/bin/`.
+
+Binaries are unsigned. On first launch: right-click > Open, or run:
+```bash
+xattr -dr com.apple.quarantine squelchbox-standalone
+```
+
+**Standalone note:** Use the included `squelchbox-macos.sh` launcher instead of running `squelchbox-standalone` directly. CoreAudio delivers variable-sized buffers that can exceed the configured size, causing a panic in nih-plug's CPAL backend. The launcher passes `--period-size 4096` to accommodate this. See [nih-plug#266](https://github.com/robbert-vdh/nih-plug/issues/266).
+
+### Windows
+
+Extract the `.zip` and run `install.bat` (may need Administrator for the VST3/CLAP paths).
+
+Installs VST3 to `%CommonProgramFiles%\VST3\`, CLAP to `%CommonProgramFiles%\CLAP\`, and standalone to `%LocalAppData%\SquelchBox\`.
+
+**Standalone note:** Use `SquelchBox.bat` (not `squelchbox-standalone.exe` directly). WASAPI in shared mode delivers buffers in the device's native period (often 1056-1266 samples on Windows 11), exceeding nih-plug's default 512-sample buffer. The launcher passes `--period-size 2048` to avoid this.
+
+### Arch Linux (AUR)
+
+```bash
+paru -S squelchbox     # or yay, makepkg, etc.
+```
+
+Installs VST3 and CLAP system-wide to `/usr/lib/vst3/` and `/usr/lib/clap/`, standalone to `/usr/bin/squelchbox`.
+
+### Verify checksums
+
+Each release includes a `SHA256SUMS.txt`. After downloading:
+
+```bash
+sha256sum -c SHA256SUMS.txt
+```
+
+## Build from source
+
+Requires Rust stable 1.75+ (or nightly).
 
 ```bash
 # Check / test
 cargo check
-cargo test         # 101 tests
+cargo test
 
 # Bundle VST3 + CLAP
 cargo xtask bundle squelchbox --release
 
 # Install (Linux)
-rm -rf ~/.vst3/SquelchBox.vst3
-cp -r target/bundled/SquelchBox.vst3 ~/.vst3/
+rm -rf ~/.vst3/squelchbox.vst3
+cp -r target/bundled/squelchbox.vst3 ~/.vst3/
 cp -f target/bundled/squelchbox.clap ~/.clap/
 
-# Standalone
+# Standalone (Linux — match your PipeWire/JACK sample rate)
 cargo run --release -- --sample-rate 44100 --period-size 512
 ```
 
