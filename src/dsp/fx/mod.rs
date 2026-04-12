@@ -2,4 +2,5 @@
 
 pub mod delay;
 pub mod distortion;
+pub mod limiter;
 pub mod reverb;
