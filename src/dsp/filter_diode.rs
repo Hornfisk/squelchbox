@@ -121,7 +121,7 @@ impl DiodeLadder3Pole {
     pub fn set_cutoff(&mut self, hz: f32) {
         let hz = hz.clamp(20.0, self.sr * 0.45);
         self.fc_hz = hz;
-        // Bilinear prewarp, matching the placeholder 1-pole for consistency.
+        // Bilinear prewarp.
         let wd = 2.0 * PI * hz;
         let t = 1.0 / self.sr;
         let wa = (2.0 / t) * (wd * t * 0.5).tan();

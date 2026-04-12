@@ -1,9 +1,7 @@
 //! SquelchBox `Plugin` impl.
 //!
-//! M1 drop: wires MIDI note-on/note-off through to a single `Voice303`.
-//! The voice runs the oscillator + envelopes + placeholder 1-pole lowpass
-//! — enough to hear that the full pipeline works end-to-end. The real
-//! 3-pole diode ladder arrives in M2, sequencer in M5, FX in M6.
+//! Wires MIDI + sequencer events through to `Voice303`, applies the FX
+//! chain (distortion → delay → reverb → limiter), and drives the egui editor.
 
 use nih_plug::prelude::*;
 use std::sync::atomic::Ordering;

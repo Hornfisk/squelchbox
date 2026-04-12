@@ -1,9 +1,7 @@
-//! Monophonic 303 voice: oscillator + filter + envelopes + pitch control.
+//! Monophonic 303 voice: oscillator + diode ladder filter + envelopes + pitch control.
 //!
-//! M1 uses [`OnePoleLp`] as a placeholder filter so the voice pipeline is
-//! audibly end-to-end. M2 swaps it for the 3-pole diode ladder, and M3
-//! wraps the filter section in the oversampler. The [`Voice303`] API is
-//! stable across those changes — only the internal `filter` field swaps.
+//! Assembles `BlepSaw`/`BlepSquare` → `DiodeLadder3Pole` (oversampled 2×)
+//! → `AmpEnv`/`FilterEnv`/`AccentEnv` into a per-sample render pipeline.
 
 use crate::dsp::envelope::{AccentEnv, AmpEnv, FilterEnv};
 use crate::dsp::filter_diode::DiodeLadder3Pole;

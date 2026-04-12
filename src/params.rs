@@ -1,8 +1,8 @@
 //! Parameter definitions for SquelchBox.
 //!
-//! M1 drop: master volume + the six classic TB-303 knobs (Tuning, Cutoff,
-//! Resonance, Env Mod, Decay, Accent) + waveform select. FX, sequencer, and
-//! Under-the-Hood params arrive in later milestones.
+//! Master volume, the six classic TB-303 knobs (Tuning, Cutoff, Resonance,
+//! Env Mod, Decay, Accent), waveform select, sequencer controls, and FX
+//! parameters (distortion, delay, reverb).
 
 use nih_plug::prelude::*;
 use nih_plug_egui::EguiState;
