@@ -4,3 +4,5 @@
 *.swo
 .DS_Store
 .worktrees/
+.cargo/
+.superpowers/
