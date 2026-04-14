@@ -6,12 +6,9 @@ Built with Rust, [nih-plug](https://github.com/robbert-vdh/nih-plug), and egui.
 
 ![SquelchBox UI](assets/screenshot.png)
 
-## Demo
+## Listen
 
-<video src="https://github.com/Hornfisk/squelchbox/raw/main/assets/squelchbox_demo.mp4" controls width="480" muted="false">
-  Your browser does not support embedded video.
-  <a href="https://github.com/Hornfisk/squelchbox/raw/main/assets/squelchbox_demo.mp4">Watch the demo</a>.
-</video>
+[squelchbox_demo.mp3](assets/squelchbox_demo.mp3) — 320 kbps · ~1 minute · download and play locally.
 
 ## Features
 
