@@ -8,7 +8,7 @@ Built with Rust, [nih-plug](https://github.com/robbert-vdh/nih-plug), and egui.
 
 ## Listen
 
-[squelchbox_demo.mp3](assets/squelchbox_demo.mp3) — 320 kbps · ~1 minute · download and play locally.
+[Hear it in your browser](https://hornfisk.github.io/squelchbox/) — 320 kbps demo.
 
 ## Features
 
