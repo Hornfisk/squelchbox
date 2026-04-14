@@ -6,6 +6,13 @@ Built with Rust, [nih-plug](https://github.com/robbert-vdh/nih-plug), and egui.
 
 ![SquelchBox UI](assets/screenshot.png)
 
+## Demo
+
+<video src="https://github.com/Hornfisk/squelchbox/raw/main/assets/squelchbox_demo.mp4" controls width="480" muted="false">
+  Your browser does not support embedded video.
+  <a href="https://github.com/Hornfisk/squelchbox/raw/main/assets/squelchbox_demo.mp4">Watch the demo</a>.
+</video>
+
 ## Features
 
 - **Oscillator** -- bandlimited saw + square (BLIT/polyBLEP), drift LFO for analog warmth
@@ -17,12 +24,6 @@ Built with Rust, [nih-plug](https://github.com/robbert-vdh/nih-plug), and egui.
 - **Slide/glide** -- portamento between legato steps, authentic 303 slide behavior
 - **Computer keyboard** -- chromatic note input, step editing, tap tempo, pattern randomizer
 - **MIDI export** -- dump patterns as .mid files
-
-## Audio
-
-<!-- TODO: Add audio samples / links here -->
-
-Coming soon.
 
 ## Install (prebuilt binaries)
 
