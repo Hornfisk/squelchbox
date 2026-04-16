@@ -1,0 +1,58 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what actually happened?
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: Plugin format
+      options:
+        - VST3
+        - CLAP
+        - Standalone
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host / DAW
+      description: e.g. Reaper 7.15, Bitwig 5.2, Ardour 8, standalone
+  - type: input
+    id: version
+    attributes:
+      label: SquelchBox version
+      placeholder: "0.1.1"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Load plugin
+        2. Set cutoff to ...
+        3. ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / console output
+      description: Paste any panics, stack traces, or console messages here.
+      render: shell

@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest an idea or improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that SquelchBox doesn't let you do today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Sketch what you'd like to see — a knob, a mode, a workflow change, whatever.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds, related plugins, or other approaches you've looked at.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: References, screenshots, links, prior art.
