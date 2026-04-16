@@ -2,6 +2,23 @@
 
 All notable changes to SquelchBox are documented here.
 
+## [0.1.1] — 2026-04-16
+
+UI layout refinements and two small DSP fixes.
+
+### Changed
+- **Upper-panel layout** — SB-303 branding stays centered; REVERB toggle + knobs relocated to a dedicated far-right zone so they no longer overlap the branding; BANK row + LEN spinner shifted up; DIST controls sit bare on the faceplate (no tray); logo and subtitle removed; TEMPO knob sized to match VOLUME.
+- **Readouts** — BPM and LED readout now share the inset LED styling and are aligned at the same vertical position; BPM box narrowed to 3-digit comfy width.
+- **DIST knob sizing** — DRIVE + MIX knobs 10% smaller and lifted slightly off the separator.
+- **FX labels** — delay/reverb knob labels match DIST label styling (size, spacing, weight).
+
+### Fixed
+- **DIST enable click** — priming the distortion DC-blocker to its silence steady-state removes the subtle click heard when toggling DIST on with no input.
+- **Delay re-enable tail artifact** — delay buffer is now cleared on off→on transition, preventing stale residue from the previous run bleeding back in.
+
+### Notes
+- Same nih-plug buffer-size caveats apply as in 0.1.0 (see below).
+
 ## [0.1.0] — 2026-04-13
 
 First public release.

@@ -18,6 +18,7 @@ pub fn draw_band2(
 ) {
     let top = rect.top();
     let lbl_y = top + BAND1_BOT + 12.0;
+    let bank_y = top + BAND1_BOT + 2.0;
     let tx = rect.left() + 68.0;
     let px = rect.left() + 162.0;
     let mx = rect.left() + 280.0;
@@ -34,7 +35,7 @@ pub fn draw_band2(
         p.text(Pos2::new(tx + 32.0, top + CTL_Y + 34.0), egui::Align2::RIGHT_CENTER, "FAST",
             egui::FontId::new(6.5, egui::FontFamily::Monospace), SILVER_SHADOW);
 
-        p.text(Pos2::new(track_x0, lbl_y), egui::Align2::LEFT_TOP, "BANK",
+        p.text(Pos2::new(track_x0, bank_y), egui::Align2::LEFT_TOP, "BANK",
             egui::FontId::new(7.0, egui::FontFamily::Monospace), SILVER_SHADOW);
         p.text(Pos2::new(px, lbl_y + 28.0), egui::Align2::CENTER_TOP, "SLIDE",
             egui::FontId::new(7.5, egui::FontFamily::Monospace), INK);
@@ -84,7 +85,7 @@ pub fn draw_band2(
     let queued = kbd.queued_bank();
     for (j, lbl) in ["I", "II", "III", "IV"].iter().enumerate() {
         let bx = track_x0 + 2.0 + j as f32 * 18.0;
-        let by = lbl_y + 12.0;
+        let by = bank_y + 12.0;
         let br = Rect::from_min_size(Pos2::new(bx, by), Vec2::new(14.0, 10.0));
         let id = ids::bank_btn(j);
         let resp = ui.interact(br, id, egui::Sense::click())
@@ -107,7 +108,7 @@ pub fn draw_band2(
 
     // ── LEN spinner ──
     let cur_len = kbd.pattern_snapshot().length.clamp(1, 16);
-    let len_y = lbl_y + 12.0;
+    let len_y = bank_y + 12.0;
     let len_label_x = track_x0 + 80.0;
     let len_x0 = len_label_x + 20.0;
     ui.painter().text(Pos2::new(len_label_x, len_y + 1.0), egui::Align2::LEFT_TOP,
@@ -141,7 +142,7 @@ pub fn draw_band2(
 
     // Interactive knobs
     param_knob(ui, setter, ids::tempo(), &params.seq_bpm,
-        Pos2::new(tx, top + CTL_Y), 30.0, "TEMPO", |v| format!("{v:.0} BPM"), false)
+        Pos2::new(tx, top + CTL_Y), 26.0, "TEMPO", |v| format!("{v:.0} BPM"), false)
         .on_hover_text("Tempo — sequencer BPM (40..220).\nDrag the knob, or click the box below to type.");
     param_knob(ui, setter, ids::slide(), &params.slide_ms,
         Pos2::new(px, top + CTL_Y), 20.0, "SLIDE", |v| format!("{v:.0} ms"), false)
@@ -191,12 +192,18 @@ pub fn draw_band2(
         false)
         .on_hover_text("Volume — master output gain (-60..+6 dB).");
 
-    // ── BPM text entry ──
+    // ── BPM text entry ── (LED-style readout matching CUT FREQ)
     let bpm_id = ids::bpm_edit();
     let bpm_rect = Rect::from_center_size(
-        Pos2::new(tx, top + CTL_Y + 50.0),
-        Vec2::new(46.0, 15.0),
+        Pos2::new(tx, top + CTL_Y + 45.0),
+        Vec2::new(34.0, 14.0),
     );
+    {
+        let p = ui.painter();
+        p.rect_filled(bpm_rect.translate(Vec2::new(0.0, 1.0)), 2.0, SILVER_LIGHT);
+        p.rect_filled(bpm_rect, 2.0, INSET);
+        p.rect_stroke(bpm_rect, 2.0, Stroke::new(0.8, INK), egui::StrokeKind::Inside);
+    }
     let focused = ui.memory(|m| m.has_focus(bpm_id));
     let mut bpm_str = if focused {
         ui.ctx()
@@ -210,8 +217,10 @@ pub fn draw_band2(
         egui::TextEdit::singleline(&mut bpm_str)
             .id(bpm_id)
             .font(egui::FontId::new(9.0, egui::FontFamily::Monospace))
+            .text_color(INSET_TEXT)
             .horizontal_align(egui::Align::Center)
-            .desired_width(46.0),
+            .frame(false)
+            .desired_width(34.0),
     ).on_hover_text("BPM — click to type a value, Enter to commit (40..220).");
     if resp.has_focus() {
         ui.ctx().data_mut(|d| d.insert_temp(bpm_id, bpm_str.clone()));

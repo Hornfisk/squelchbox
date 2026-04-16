@@ -36,6 +36,13 @@ impl Distortion {
         self.dc_y1 = 0.0;
     }
 
+    /// Prime the DC-blocker to its silence-in steady state so the first
+    /// sample after enabling doesn't produce a DC step click.
+    pub fn prime_for_silence(&mut self) {
+        self.dc_x1 = fast_tanh(ASYM_BIAS);
+        self.dc_y1 = 0.0;
+    }
+
     /// Process a single sample. `drive`: 0.0–1.0, `mix`: 0.0–1.0.
     #[inline]
     pub fn process(&mut self, input: f32, drive: f32, mix: f32) -> f32 {

@@ -1,6 +1,6 @@
 # Maintainer: Hornfisk <hornfisk@users.noreply.github.com>
 pkgname=squelchbox
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc='TB-303-style acid bassline synthesizer plugin (VST3/CLAP/standalone)'
 arch=('x86_64')

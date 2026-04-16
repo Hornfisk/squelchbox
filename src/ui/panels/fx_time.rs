@@ -18,12 +18,13 @@ pub fn draw_fx_time(
     let dt = ui.ctx().input(|i| i.stable_dt).min(0.05);
     let delay_on = params.delay_enable.value();
     let reverb_on = params.reverb_enable.value();
-    let any_on = delay_on || reverb_on;
 
-    // Animation: 0.0 = show branding, 1.0 = show controls.
+    // Animation: 0.0 = show branding, 1.0 = show delay controls.
+    // Driven by delay only — reverb lives in its own right-side zone and
+    // doesn't overlap the central SB-303 branding anymore.
     let anim_id = ids::fx_time_anim();
     let mut progress: f32 = ui.ctx().data(|d| d.get_temp(anim_id)).unwrap_or(0.0);
-    let target = if any_on { 1.0 } else { 0.0 };
+    let target = if delay_on { 1.0 } else { 0.0 };
     if (progress - target).abs() > 0.001 {
         progress += (target - progress).signum() * dt * (1.0 / 0.2);
         progress = progress.clamp(0.0, 1.0);
@@ -37,6 +38,7 @@ pub fn draw_fx_time(
     let zone_y = top + BAND1_BOT + 10.0;
     let zone_w = 250.0;
     let toggle_y = zone_y;
+    let reverb_zone_x = rect.left() + 620.0;
 
     // ── Delay toggle ──
     let dly_toggle_rect = Rect::from_min_size(
@@ -67,9 +69,9 @@ pub fn draw_fx_time(
         setter.end_set_parameter(&params.delay_enable);
     }
 
-    // ── Reverb toggle ──
+    // ── Reverb toggle (far-right, near VOLUME) ──
     let vrb_toggle_rect = Rect::from_min_size(
-        Pos2::new(zone_x + 100.0, toggle_y),
+        Pos2::new(reverb_zone_x, toggle_y),
         Vec2::new(TOGGLE_W, TOGGLE_H),
     );
     let vrb_resp = ui
@@ -103,8 +105,8 @@ pub fn draw_fx_time(
         Stroke::new(0.5, SILVER_SHADOW),
     );
 
-    // ── LED readout ──
-    let led_y = zone_y + 80.0;
+    // ── LED readout ── (aligned vertically with BPM readout in band2)
+    let led_y = zone_y + 85.0;
     {
         let display = ui.ctx()
             .data(|d| d.get_temp::<String>(ids::display()))
@@ -137,12 +139,11 @@ pub fn draw_fx_time(
 
     // ── Control rows (fade in) ──
     if progress > 0.3 {
-        let both = delay_on && reverb_on;
-        let kr = if both { FX_KNOB_SM } else { FX_KNOB_R };
+        let kr = FX_KNOB_R;
 
         // ── Delay row ──
         if delay_on {
-            let knob_cy = if both { content_y + 14.0 } else { content_y + content_h * 0.5 - 4.0 };
+            let knob_cy = content_y + content_h * 0.5 - 4.0;
             let row_left = zone_x;
 
             // Mode button (ANA / CLN)
@@ -184,8 +185,8 @@ pub fn draw_fx_time(
             {
                 let p = ui.painter();
                 for (cx, lbl) in [(sync_cx, "SYNC"), (fdbk_cx, "FDBK"), (mix_cx, "MIX")] {
-                    p.text(Pos2::new(cx, knob_cy + kr + 3.0), egui::Align2::CENTER_TOP, lbl,
-                        egui::FontId::new(5.5, egui::FontFamily::Monospace), INK);
+                    p.text(Pos2::new(cx, knob_cy + kr + 5.0), egui::Align2::CENTER_TOP, lbl,
+                        egui::FontId::new(6.5, egui::FontFamily::Monospace), INK);
                 }
             }
 
@@ -209,7 +210,7 @@ pub fn draw_fx_time(
                 p.rect_filled(sync_rect, kr, KNOB_CORE);
                 p.rect_stroke(sync_rect, kr, Stroke::new(2.0, KNOB_RING), egui::StrokeKind::Outside);
                 p.text(sync_rect.center(), egui::Align2::CENTER_CENTER, lbl,
-                    egui::FontId::new(if both { 6.5 } else { 8.0 }, egui::FontFamily::Monospace), INDICATOR);
+                    egui::FontId::new(8.0, egui::FontFamily::Monospace), INDICATOR);
             }
             if sync_resp.clicked() {
                 let next = match params.delay_sync.value() {
@@ -234,40 +235,32 @@ pub fn draw_fx_time(
                 "MIX", |v| format!("{:.0}%", v * 100.0), false)
                 .on_hover_text("Delay Mix — dry/wet blend.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
         }
+    }
 
-        // ── Separator ──
-        if both {
-            let sep_y = content_y + content_h * 0.5;
-            ui.painter().line_segment(
-                [Pos2::new(zone_x, sep_y), Pos2::new(zone_x + 160.0, sep_y)],
-                Stroke::new(0.5, SILVER_SHADOW),
-            );
-        }
+    // ── Reverb row (own zone, far-right, independent of delay animation) ──
+    if reverb_on {
+        let kr = FX_KNOB_R;
+        let knob_cy = content_y + content_h * 0.5 - 4.0;
+        let row_left = reverb_zone_x;
+        let decay_cx = row_left + 10.0;
+        let mix_cx = row_left + 50.0;
 
-        // ── Reverb row ──
-        if reverb_on {
-            let knob_cy = if both { content_y + content_h - 14.0 } else { content_y + content_h * 0.5 - 4.0 };
-            let row_left = zone_x;
-            let decay_cx = row_left + 50.0;
-            let mix_cx = row_left + 90.0;
-
-            {
-                let p = ui.painter();
-                for (cx, lbl) in [(decay_cx, "DECAY"), (mix_cx, "MIX")] {
-                    p.text(Pos2::new(cx, knob_cy + kr + 3.0), egui::Align2::CENTER_TOP, lbl,
-                        egui::FontId::new(5.5, egui::FontFamily::Monospace), INK);
-                }
+        {
+            let p = ui.painter();
+            for (cx, lbl) in [(decay_cx, "DECAY"), (mix_cx, "MIX")] {
+                p.text(Pos2::new(cx, knob_cy + kr + 5.0), egui::Align2::CENTER_TOP, lbl,
+                    egui::FontId::new(6.5, egui::FontFamily::Monospace), INK);
             }
-
-            param_knob(ui, setter, ids::reverb_decay(),
-                &params.reverb_decay, Pos2::new(decay_cx, knob_cy), kr,
-                "DECAY", |v| format!("{:.0}%", v * 100.0), false)
-                .on_hover_text("Reverb Decay — room size / tail length.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
-
-            param_knob(ui, setter, ids::reverb_mix(),
-                &params.reverb_mix, Pos2::new(mix_cx, knob_cy), kr,
-                "MIX", |v| format!("{:.0}%", v * 100.0), false)
-                .on_hover_text("Reverb Mix — dry/wet blend.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
         }
+
+        param_knob(ui, setter, ids::reverb_decay(),
+            &params.reverb_decay, Pos2::new(decay_cx, knob_cy), kr,
+            "DECAY", |v| format!("{:.0}%", v * 100.0), false)
+            .on_hover_text("Reverb Decay — room size / tail length.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
+
+        param_knob(ui, setter, ids::reverb_mix(),
+            &params.reverb_mix, Pos2::new(mix_cx, knob_cy), kr,
+            "MIX", |v| format!("{:.0}%", v * 100.0), false)
+            .on_hover_text("Reverb Mix — dry/wet blend.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
     }
 }

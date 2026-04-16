@@ -48,6 +48,8 @@ pub struct FxChain {
     pub reverb: Reverb,
     pub loudness_comp: LoudnessComp,
     pub limiter: Limiter,
+    prev_dist_enable: bool,
+    prev_delay_enable: bool,
 }
 
 impl FxChain {
@@ -58,6 +60,8 @@ impl FxChain {
             reverb: Reverb::new(sample_rate),
             loudness_comp: LoudnessComp::new(sample_rate),
             limiter: Limiter::new(sample_rate),
+            prev_dist_enable: false,
+            prev_delay_enable: false,
         }
     }
 
@@ -84,6 +88,16 @@ impl FxChain {
     /// Process a single sample through the full chain.
     #[inline]
     pub fn process(&mut self, input: f32, params: &FxParams) -> f32 {
+        // Handle off→on transitions to avoid click/tail artifacts.
+        if params.dist_enable && !self.prev_dist_enable {
+            self.distortion.prime_for_silence();
+        }
+        if params.delay_enable && !self.prev_delay_enable {
+            self.delay.reset();
+        }
+        self.prev_dist_enable = params.dist_enable;
+        self.prev_delay_enable = params.delay_enable;
+
         let mut s = input;
 
         // Stage 1: Distortion

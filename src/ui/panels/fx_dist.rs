@@ -6,7 +6,7 @@ use nih_plug_egui::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 use crate::params::SquelchBoxParams;
 use crate::ui::ids;
 use crate::ui::palette::*;
-use crate::ui::widgets::{lerp_color, param_knob};
+use crate::ui::widgets::param_knob;
 
 pub fn draw_fx_dist(
     ui: &mut egui::Ui,
@@ -91,69 +91,55 @@ pub fn draw_fx_dist(
         setter.end_set_parameter(&params.dist_enable);
     }
 
-    // Animated compartment: DRIVE + MIX knobs in a recessed tray.
-    if progress > 0.001 {
-        let tray_y = toggle_y + TOGGLE_H + 4.0;
-        let tray_h = 44.0 * progress;
-        let tray = Rect::from_min_size(
-            Pos2::new(toggle_x, tray_y),
-            Vec2::new(120.0, tray_h),
-        );
+    // DRIVE + MIX knobs (no surrounding tray — bare-on-faceplate).
+    if progress > 0.5 {
+        let kr = FX_KNOB_R * 0.9;
+        let knob_y = toggle_y + TOGGLE_H + 16.0;
+        let drive_cx = toggle_x + 30.0;
+        let mix_cx = toggle_x + 80.0;
 
         {
             let p = ui.painter();
-            p.rect_filled(tray, 3.0, lerp_color(SILVER_MID, SILVER_DARK, 0.4));
-            p.rect_stroke(tray, 3.0, Stroke::new(0.8, SILVER_SHADOW), egui::StrokeKind::Inside);
-        }
-
-        if progress > 0.5 {
-            let knob_y = tray_y + 16.0;
-            let drive_cx = toggle_x + 30.0;
-            let mix_cx = toggle_x + 80.0;
-
-            {
-                let p = ui.painter();
-                p.text(
-                    Pos2::new(drive_cx, knob_y + FX_KNOB_R + 5.0),
-                    egui::Align2::CENTER_TOP,
-                    "DRIVE",
-                    egui::FontId::new(6.5, egui::FontFamily::Monospace),
-                    INK,
-                );
-                p.text(
-                    Pos2::new(mix_cx, knob_y + FX_KNOB_R + 5.0),
-                    egui::Align2::CENTER_TOP,
-                    "MIX",
-                    egui::FontId::new(6.5, egui::FontFamily::Monospace),
-                    INK,
-                );
-            }
-
-            param_knob(
-                ui,
-                setter,
-                ids::dist_drive(),
-                &params.dist_drive,
-                Pos2::new(drive_cx, knob_y),
-                FX_KNOB_R,
+            p.text(
+                Pos2::new(drive_cx, knob_y + kr + 5.0),
+                egui::Align2::CENTER_TOP,
                 "DRIVE",
-                |v| format!("{:.0}%", v * 100.0),
-                false,
-            )
-            .on_hover_text("Drive — distortion intensity.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
-
-            param_knob(
-                ui,
-                setter,
-                ids::dist_mix(),
-                &params.dist_mix,
-                Pos2::new(mix_cx, knob_y),
-                FX_KNOB_R,
+                egui::FontId::new(6.5, egui::FontFamily::Monospace),
+                INK,
+            );
+            p.text(
+                Pos2::new(mix_cx, knob_y + kr + 5.0),
+                egui::Align2::CENTER_TOP,
                 "MIX",
-                |v| format!("{:.0}%", v * 100.0),
-                false,
-            )
-            .on_hover_text("Dist Mix — dry/wet blend.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
+                egui::FontId::new(6.5, egui::FontFamily::Monospace),
+                INK,
+            );
         }
+
+        param_knob(
+            ui,
+            setter,
+            ids::dist_drive(),
+            &params.dist_drive,
+            Pos2::new(drive_cx, knob_y),
+            kr,
+            "DRIVE",
+            |v| format!("{:.0}%", v * 100.0),
+            false,
+        )
+        .on_hover_text("Drive — distortion intensity.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
+
+        param_knob(
+            ui,
+            setter,
+            ids::dist_mix(),
+            &params.dist_mix,
+            Pos2::new(mix_cx, knob_y),
+            kr,
+            "MIX",
+            |v| format!("{:.0}%", v * 100.0),
+            false,
+        )
+        .on_hover_text("Dist Mix — dry/wet blend.\nDrag: adjust · Shift+drag: fine · Ctrl-click: reset");
     }
 }

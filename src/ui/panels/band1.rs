@@ -1,7 +1,7 @@
 //! Band 1: brand/logo strip + six main 303-style knobs.
 
 use nih_plug::prelude::*;
-use nih_plug_egui::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
+use nih_plug_egui::egui::{self, Color32, Pos2, Rect, Stroke};
 
 use crate::params::SquelchBoxParams;
 use crate::ui::ids;
@@ -17,36 +17,14 @@ pub fn draw_band1(
     let p = ui.painter();
     let top = rect.top();
 
-    // ── Our logo (replaces Roland red square) ──
-    let logo_x = rect.left() + 28.0;
-    let logo_y = top + BAND1_TOP + 8.0;
-    let logo = Rect::from_min_size(Pos2::new(logo_x, logo_y), Vec2::new(22.0, 22.0));
-    p.rect_filled(logo.translate(Vec2::new(0.5, 1.0)), 2.0, RED_DARK);
-    p.rect_filled(logo, 2.0, RED);
+    // Brand wordmark (left-aligned with DIST toggle below)
     p.text(
-        logo.center() + Vec2::new(0.0, 0.5),
-        egui::Align2::CENTER_CENTER,
-        "S",
-        egui::FontId::new(14.0, egui::FontFamily::Proportional),
-        Color32::WHITE,
-    );
-
-    // Brand wordmark
-    p.text(
-        Pos2::new(rect.left() + 56.0, top + BAND1_TOP + 9.0),
+        Pos2::new(rect.left() + 28.0, top + BAND1_TOP + 9.0),
         egui::Align2::LEFT_TOP,
         "SQUELCHBOX",
         egui::FontId::new(15.0, egui::FontFamily::Proportional),
         INK,
     );
-    p.text(
-        Pos2::new(rect.left() + 56.0, top + BAND1_TOP + 27.0),
-        egui::Align2::LEFT_TOP,
-        "COMPUTER CONTROLLED BASS LINE",
-        egui::FontId::new(7.5, egui::FontFamily::Monospace),
-        SILVER_SHADOW,
-    );
-
     // "Bass Line" right side
     p.text(
         Pos2::new(rect.right() - 28.0, top + BAND1_TOP + 9.0),
