@@ -4,7 +4,9 @@ A FOSS TB-303-style acid bassline synthesizer plugin. VST3 + CLAP + standalone.
 
 Built with Rust, [nih-plug](https://github.com/robbert-vdh/nih-plug), and egui.
 
-![SquelchBox UI](assets/screenshot.png)
+![SquelchBox demo](assets/demo.gif)
+
+_Full-quality MP4: [`assets/demo.mp4`](assets/demo.mp4). Static screenshot: [`assets/screenshot.png`](assets/screenshot.png)._
 
 ## Listen
 
