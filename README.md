@@ -14,12 +14,12 @@ Built with Rust, [nih-plug](https://github.com/robbert-vdh/nih-plug), and egui.
 
 - **Oscillator** -- bandlimited saw + square (BLIT/polyBLEP), drift LFO for analog warmth
 - **3-pole diode ladder filter** -- self-oscillating, with 2x oversampling via half-band polyphase
-- **Envelopes** -- exponential amp, one-shot filter (attack-decay), dedicated accent envelope
+- **Envelopes** -- authentic TB-303 VEG (gate-driven amp), one-shot filter (adjustable curve), accent envelope with 300 ms RC decay and charge accumulation
 - **16-step sequencer** -- per-step pitch/accent/slide/rest, pattern length 1-16, swing, 4-bank pattern memory
 - **Sync modes** -- Internal (free-run), Host (DAW transport slave), MIDI (keyboard only)
-- **FX chain** -- Diode distortion, tempo-synced delay (analog/clean), Schroeder reverb, brickwall limiter
+- **FX chain** -- Diode distortion, tempo-synced delay (analog/clean), Schroeder reverb, loudness comp, brickwall limiter
 - **Slide/glide** -- portamento between legato steps, authentic 303 slide behavior
-- **Computer keyboard** -- chromatic note input, step editing, tap tempo, pattern randomizer
+- **Computer keyboard** -- chromatic note input, step editing (during playback), click-drag draw, tap tempo, pattern randomizer
 - **MIDI export** -- dump patterns as .mid files
 
 ## Install (prebuilt binaries)
@@ -112,7 +112,7 @@ src/
 
   dsp/
     oscillator.rs     -- bandlimited saw + square
-    envelope.rs       -- amp, filter, accent envelopes
+    envelope.rs       -- authentic 303 VEG, filter env, accent env (300ms RC)
     filter_diode.rs   -- 3-pole diode ladder (bilinear transform)
     oversampler.rs    -- 2x half-band polyphase up/downsample
     voice.rs          -- monophonic voice: osc + filter + envelopes

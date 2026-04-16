@@ -66,7 +66,11 @@ impl Plugin for SquelchBox {
         ..AudioIOLayout::const_default()
     }];
 
-    const MIDI_INPUT: MidiConfig = MidiConfig::Basic;
+    // MidiCCs (not just Basic) so DAWs can automate parameters via CC —
+    // nih-plug delivers `NoteEvent::MidiCC` in `process()`, and the
+    // VST3/CLAP wrapper also exposes every CC as a host-automatable
+    // virtual parameter. See `midi_cc::apply_cc` for the CC → param map.
+    const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
     const MIDI_OUTPUT: MidiConfig = MidiConfig::None;
     const SAMPLE_ACCURATE_AUTOMATION: bool = true;
 
@@ -198,7 +202,11 @@ impl Plugin for SquelchBox {
             SyncMode::Midi => (false, self.params.seq_bpm.smoothed.next()),
         };
         self.sequencer.clock.set_bpm(clock_bpm);
+        let was_seq_running = self.sequencer.clock.is_running();
         self.sequencer.clock.set_running(clock_running);
+        if was_seq_running && !clock_running {
+            self.voice.gate_off();
+        }
 
         // ─── FX per-block setup ─────────────────────────────────
         self.fx_chain.set_delay_tempo(
@@ -264,6 +272,14 @@ impl Plugin for SquelchBox {
                     }
                     NoteEvent::NoteOff { .. } => {
                         self.voice.gate_off();
+                    }
+                    NoteEvent::MidiCC { cc, value, .. } => {
+                        crate::midi_cc::apply_cc(
+                            &self.params,
+                            self.sample_rate,
+                            cc,
+                            value,
+                        );
                     }
                     _ => {}
                 }

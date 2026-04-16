@@ -21,6 +21,14 @@ pub fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
     let semi_range = SEMI_HI - SEMI_LO;
     let mut pattern_dirty = false;
 
+    // Click-drag draw state: when a drag starts on any step cell, set
+    // this flag so dragging across cell boundaries paints pitches onto
+    // every step the pointer traverses.
+    let primary_down = ui.input(|i| i.pointer.primary_down());
+    if !primary_down {
+        ui.ctx().data_mut(|d| d.insert_temp(ids::draw_active(), false));
+    }
+
     // ─── Input pass: per-step hit-rects ───
     for i in 0..16 {
         let cx = rect.left() + STEP_X0 + (i as f32 + 0.5) * STEP_CELL;
@@ -99,7 +107,10 @@ pub fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
             pattern.steps[i].rest = !pattern.steps[i].rest;
             pattern_dirty = true;
             kbd.set_selected_step(i);
-        } else if resp.dragged() || resp.drag_started() || resp.clicked() {
+        } else if resp.drag_started() || resp.dragged() || resp.clicked() {
+            if resp.drag_started() {
+                ui.ctx().data_mut(|d| d.insert_temp(ids::draw_active(), true));
+            }
             if let Some(pos) = resp.interact_pointer_pos() {
                 let t = ((pos.y - (top + SLD_Y0)) / slider_h).clamp(0.0, 1.0);
                 let semi = (SEMI_HI - t * semi_range).round() as i32;
@@ -107,6 +118,28 @@ pub fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
                 pattern.steps[i].rest = false;
                 pattern_dirty = true;
                 kbd.set_selected_step(i);
+            }
+        }
+    }
+
+    // ─── Cross-cell draw: paint pitch onto any step the pointer
+    //     traverses while dragging across cell boundaries ───
+    let draw_active: bool = ui.ctx().data(|d| d.get_temp(ids::draw_active())).unwrap_or(false);
+    if draw_active && primary_down {
+        if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
+            let step_x = pos.x - (rect.left() + STEP_X0);
+            let cell_idx = (step_x / STEP_CELL).floor() as i32;
+            if cell_idx >= 0 && cell_idx < 16 {
+                let i = cell_idx as usize;
+                let y_in_slider = pos.y - (top + SLD_Y0);
+                if y_in_slider >= -4.0 && y_in_slider <= slider_h + 4.0 {
+                    let t = (y_in_slider / slider_h).clamp(0.0, 1.0);
+                    let semi = (SEMI_HI - t * semi_range).round() as i32;
+                    pattern.steps[i].semitone = semi.clamp(SEMI_LO as i32, SEMI_HI as i32) as u8;
+                    pattern.steps[i].rest = false;
+                    pattern_dirty = true;
+                    kbd.set_selected_step(i);
+                }
             }
         }
     }

@@ -1,10 +1,11 @@
-//! FX chain wrapper: Distortion → Delay → Reverb → Limiter.
+//! FX chain wrapper: Distortion → Delay → Reverb → LoudnessComp → Limiter.
 //!
 //! Single `process()` entry point driven per-sample from `plugin.rs`.
 
 use super::delay::{Delay, DelayMode, SyncDiv};
 use super::distortion::Distortion;
 use super::limiter::Limiter;
+use super::loudness_comp::LoudnessComp;
 use super::reverb::Reverb;
 
 /// Per-sample FX snapshot, populated from smoothed params in `plugin.rs`.
@@ -45,6 +46,7 @@ pub struct FxChain {
     pub distortion: Distortion,
     pub delay: Delay,
     pub reverb: Reverb,
+    pub loudness_comp: LoudnessComp,
     pub limiter: Limiter,
 }
 
@@ -54,6 +56,7 @@ impl FxChain {
             distortion: Distortion::new(),
             delay: Delay::new(sample_rate),
             reverb: Reverb::new(sample_rate),
+            loudness_comp: LoudnessComp::new(sample_rate),
             limiter: Limiter::new(sample_rate),
         }
     }
@@ -61,6 +64,7 @@ impl FxChain {
     pub fn set_sample_rate(&mut self, sr: f32) {
         self.delay.set_sample_rate(sr);
         self.reverb.set_sample_rate(sr);
+        self.loudness_comp.set_sample_rate(sr);
         self.limiter.set_sample_rate(sr);
     }
 
@@ -68,6 +72,7 @@ impl FxChain {
         self.distortion.reset();
         self.delay.reset();
         self.reverb.reset();
+        self.loudness_comp.reset();
         self.limiter.reset();
     }
 
@@ -97,7 +102,10 @@ impl FxChain {
             s = self.reverb.process(s, params.reverb_mix);
         }
 
-        // Stage 4: Limiter (always on)
+        // Stage 4: Loudness comp (always on, tames post-reverb swings)
+        s = self.loudness_comp.process(s);
+
+        // Stage 5: Limiter (always on)
         self.limiter.process(s)
     }
 }
@@ -109,15 +117,20 @@ mod tests {
     const SR: f32 = 48_000.0;
 
     #[test]
-    fn all_bypassed_is_passthrough() {
+    fn all_bypassed_preserves_signal() {
         let mut chain = FxChain::new(SR);
         chain.set_delay_tempo(120.0, SyncDiv::Eighth);
         let params = FxParams::default(); // all off
         let input = 0.3;
-        let out = chain.process(input, &params);
+        let mut out = 0.0;
+        for _ in 0..100 {
+            out = chain.process(input, &params);
+        }
+        // Loudness comp adds ~2 dB makeup; signal should be present
+        // and slightly boosted, not attenuated or zeroed.
         assert!(
-            (out - input).abs() < 0.01,
-            "bypassed chain should pass through, got {out}"
+            out > input * 0.9 && out < input * 2.0,
+            "bypassed chain should preserve signal, got {out}"
         );
     }
 

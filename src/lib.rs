@@ -13,6 +13,7 @@ use nih_plug::prelude::*;
 mod dsp;
 mod kbd;
 mod logging;
+mod midi_cc;
 mod params;
 mod plugin;
 mod sequencer;

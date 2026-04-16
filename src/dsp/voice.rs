@@ -258,17 +258,10 @@ impl Voice303 {
         self.current_freq_semitones = target;
         self.current_freq_hz = midi_f_to_hz(target);
 
-        // Accent slightly extends amp decay in the real 303 — ~20% longer.
-        let decay = if accent {
-            params.decay_ms * 1.2
-        } else {
-            params.decay_ms
-        };
-        self.amp_env.trigger(decay);
+        // Authentic 303 VEG — fixed shape, DECAY knob only drives FilterEnv.
+        self.amp_env.gate_on();
 
-        // Filter env shares the Decay knob but is scaled to a shorter
-        // envelope so the filter "punches" before the amp tails off.
-        let filter_env_dur_s = decay * 0.75 / 1000.0;
+        let filter_env_dur_s = params.decay_ms * 0.75 / 1000.0;
         self.filter_env.trigger(filter_env_dur_s, params.filter_curve);
 
         if accent {
@@ -326,10 +319,9 @@ impl Voice303 {
             self.slide_coef = 1.0 - (-1.0 / (tau_s * self.sample_rate)).exp();
         }
 
-        let accent_scaler = if self.accent_active { 1.2 } else { 1.0 };
-        self.amp_env.set_decay_ms(p.decay_ms * accent_scaler);
+        // Authentic 303: DECAY knob only drives the filter env, not the amp.
         self.filter_env
-            .set_duration_s(p.decay_ms * 0.75 / 1000.0 * accent_scaler);
+            .set_duration_s(p.decay_ms * 0.75 / 1000.0);
     }
 
     pub fn is_active(&self) -> bool {
@@ -384,13 +376,10 @@ impl Voice303 {
             .clamp(20.0, FC_CEILING.min(self.sample_rate * 0.45));
         self.filter.set_cutoff(cutoff_hz);
 
-        // Accent adds a touch of extra resonance on top of the base knob.
-        let accent_reso_boost = if self.accent_active {
-            self.accent_amount * acc * 0.2
-        } else {
-            0.0
-        };
-        self.filter.set_resonance((self.resonance + accent_reso_boost).min(1.0));
+        // Authentic 303: accent CV is wired to VCA + VCF cutoff only, not
+        // resonance. Modulating reso on accent gave a chirpy character;
+        // removing it gives the authentic punchy weight.
+        self.filter.set_resonance(self.resonance);
 
         let filtered = match self.quality {
             QualityMode::Normal => {
@@ -521,14 +510,14 @@ mod tests {
     #[test]
     fn gate_off_releases_voice() {
         let mut v = Voice303::new(SR);
-        let p = VoiceParams { decay_ms: 10_000.0, ..Default::default() };
+        let p = VoiceParams::default();
         v.trigger(57, false, &p);
         for _ in 0..500 {
             v.tick();
         }
         v.gate_off();
-        // After 5 ms release + margin, voice should be silent and inactive.
-        for _ in 0..((0.02 * SR) as usize) {
+        // After 16 ms release + margin, voice should be silent and inactive.
+        for _ in 0..((0.03 * SR) as usize) {
             v.tick();
         }
         assert!(!v.is_active(), "voice should be inactive after gate_off");
@@ -621,25 +610,31 @@ mod tests {
     }
 
     #[test]
-    fn set_live_decay_shortens_active_amp_env() {
+    fn amp_env_holds_until_gate_off() {
         let mut v = Voice303::new(SR);
-        let p = VoiceParams { decay_ms: 5_000.0, ..Default::default() };
+        let p = VoiceParams::default();
         v.trigger(57, false, &p);
-        for _ in 0..200 {
+        let live = live_template();
+        // Tick for 200 ms — the authentic VEG should hold at ~unity
+        // the entire time (no decay, it's gate-driven). Check RMS of
+        // the last 50 ms (audio crosses zero each cycle, so min is
+        // useless; RMS captures sustained energy).
+        for _ in 0..((0.15 * SR) as usize) {
+            v.set_live(&live);
             v.tick();
         }
-        let live = VoiceLiveParams { decay_ms: 30.0, ..live_template() };
-        // Drive the live path over a short window and confirm the amp
-        // env decays to near-zero — the long original decay would have
-        // kept output well above 0.5 for seconds.
-        let mut last = 0.0f32;
-        for _ in 0..((0.1 * SR) as usize) {
+        let n = (0.05 * SR) as usize;
+        let mut sum_sq = 0.0f32;
+        for _ in 0..n {
             v.set_live(&live);
-            last = v.tick().abs();
+            let s = v.tick();
+            sum_sq += s * s;
         }
+        let rms = (sum_sq / n as f32).sqrt();
+        assert!(v.is_active(), "voice should still be active");
         assert!(
-            last < 0.05,
-            "live decay should collapse the amp env, got {last}"
+            rms > 0.05,
+            "VEG should sustain until gate_off, got RMS {rms}"
         );
     }
 

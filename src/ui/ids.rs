@@ -54,6 +54,7 @@ pub fn writenext()       -> egui::Id { egui::Id::new("sqb_writenext") }
 pub fn tap()             -> egui::Id { egui::Id::new("sqb_tap") }
 pub fn dump_midi()       -> egui::Id { egui::Id::new("sqb_dump_midi") }
 pub fn tap_history()     -> egui::Id { egui::Id::new("sqb_tap_history") }
+pub fn draw_active()     -> egui::Id { egui::Id::new("sqb_draw_active") }
 
 // ─── Indexed IDs (steps, knobs, banks) ───────────────────────────────
 
