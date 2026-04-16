@@ -6,7 +6,7 @@ Built with Rust, [nih-plug](https://github.com/robbert-vdh/nih-plug), and egui.
 
 ![SquelchBox demo](assets/demo.gif)
 
-_Full-quality MP4: [`assets/demo.mp4`](assets/demo.mp4). Static screenshot: [`assets/screenshot.png`](assets/screenshot.png)._
+_Full-quality MP4: [`assets/demo.mp4`](https://github.com/Hornfisk/squelchbox/raw/main/assets/demo.mp4). Static screenshot: [`assets/screenshot.png`](assets/screenshot.png)._
 
 ## Listen
 
