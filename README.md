@@ -12,6 +12,20 @@ _Full-quality MP4: [`assets/demo.mp4`](https://github.com/Hornfisk/squelchbox/ra
 
 [Hear it in your browser](https://hornfisk.github.io/squelchbox/) — 320 kbps demo.
 
+## Download
+
+One-click downloads for the [latest release](https://github.com/Hornfisk/squelchbox/releases/latest). Each archive contains VST3, CLAP, and standalone binaries plus an install script.
+
+| Platform | Download |
+|----------|----------|
+| **Windows** (x86_64) | [squelchbox-windows-x86_64.zip](https://github.com/Hornfisk/squelchbox/releases/latest/download/squelchbox-windows-x86_64.zip) |
+| **macOS** (Apple Silicon) | [squelchbox-macos-arm64.tar.gz](https://github.com/Hornfisk/squelchbox/releases/latest/download/squelchbox-macos-arm64.tar.gz) |
+| **macOS** (Intel) | [squelchbox-macos-x86_64.tar.gz](https://github.com/Hornfisk/squelchbox/releases/latest/download/squelchbox-macos-x86_64.tar.gz) |
+| **Linux** (x86_64) | [squelchbox-linux-x86_64.tar.gz](https://github.com/Hornfisk/squelchbox/releases/latest/download/squelchbox-linux-x86_64.tar.gz) |
+| Checksums | [SHA256SUMS.txt](https://github.com/Hornfisk/squelchbox/releases/latest/download/SHA256SUMS.txt) |
+
+See [install instructions](#install-prebuilt-binaries) for your platform below. Arch Linux users: `paru -S squelchbox` (see [AUR](#arch-linux-aur)).
+
 ## Features
 
 - **Oscillator** -- bandlimited saw + square (BLIT/polyBLEP), drift LFO for analog warmth
@@ -26,9 +40,7 @@ _Full-quality MP4: [`assets/demo.mp4`](https://github.com/Hornfisk/squelchbox/ra
 
 ## Install (prebuilt binaries)
 
-Download the latest release for your platform from the [Releases](https://github.com/Hornfisk/squelchbox/releases) page.
-
-Each archive contains VST3, CLAP, and standalone binaries plus an install script.
+After grabbing the archive for your platform from the [Download](#download) section:
 
 ### Linux
 
