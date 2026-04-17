@@ -108,6 +108,11 @@ pub struct SquelchBoxParams {
     #[persist = "pattern-v1"]
     pub pattern_state: Arc<parking_lot::Mutex<String>>,
 
+    /// UI display scale factor. 1.0 = 780×360, 1.5 = 1170×540, 2.0 = 1560×720.
+    /// Takes effect the next time the editor window is opened.
+    #[persist = "ui-scale-v1"]
+    pub ui_scale: Arc<parking_lot::Mutex<f32>>,
+
     #[id = "master_vol"]
     pub master_volume: FloatParam,
 
@@ -202,6 +207,7 @@ impl Default for SquelchBoxParams {
         Self {
             editor_state: EguiState::from_size(crate::ui::BASE_W, crate::ui::BASE_H),
             pattern_state: Arc::new(parking_lot::Mutex::new(String::new())),
+            ui_scale: Arc::new(parking_lot::Mutex::new(1.0_f32)),
 
             master_volume: FloatParam::new(
                 "Master Volume",

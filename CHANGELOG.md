@@ -2,6 +2,26 @@
 
 All notable changes to SquelchBox are documented here.
 
+## [0.1.2] — 2026-04-17
+
+Authentic TB-303 DSP pass based on hardware-level expert feedback.
+
+### Changed
+- **Filter: 4-pole diode ladder** (was 3-pole). First-stage coefficient uses `2·fc` to model the real 303's half-value first capacitor, putting the first pole an octave above the other three. Slope is now a true 24 dB/oct.
+- **Filter: DC blocker in the feedback path** — a 1-pole 30 Hz HPF on the resonance feedback signal gives the filter a mild bandpass character at very low cutoffs, matching the coupling-capacitor losses in the real circuit.
+- **Filter: no self-oscillation** — `K_MAX = 4.0` sits at 93% of the analytical `K_crit ≈ 4.3` for this topology. High-res settings produce a screamy peak with a long ring-down but the filter always decays on its own, matching the TT-303 and real TB-303 hardware. HF resonance taper widened (3 kHz → 10 kHz) with a higher floor (0.60) so high-cutoff screams still work.
+- **Oscillator: 30% duty-cycle pulse** — the "square" waveform is now a narrow PolyBLEP pulse, matching the TB-303's actual waveshape rather than a textbook 50% square.
+- **Oscillator: AC-coupling HPF** — a 30 Hz 1-pole HPF between the oscillator and the filter models the coupling capacitor in the real circuit, adding the characteristic thin/buzzy droop to both saw and square.
+- **Voice: accent cap bleeds into every note** — the accent envelope's residual charge now always modulates cutoff and amplitude, not just on accented steps. The envelope still only re-triggers on accented steps. This matches C13's actual behavior: charging is gated by the accent switch, the remaining voltage is not.
+- **Voice: resonance-to-VCA compensation** — output is scaled by `1.0 + 0.35·resonance` after the VCA saturation, compensating the perceived volume drop at high resonance. Mirrors the real 303's resonance-pot → VCA feed.
+
+### Fixed
+- **UI: SLIDE / OCT labels** — the big SLIDE label no longer overlaps the SLIDE knob; OCT sits level with the up-arrow button, with the same inter-element gap as between the two arrows.
+
+### Notes
+- Same nih-plug buffer-size caveats apply as in 0.1.0 (see below). macOS and Windows launch scripts bundled with the release apply the necessary `--period-size` workaround.
+- DSP changes documented in detail for the future SquelchPro (JUCE/C++) port.
+
 ## [0.1.1] — 2026-04-16
 
 UI layout refinements and two small DSP fixes.

@@ -4,6 +4,7 @@
 //! chain (distortion → delay → reverb → limiter), and drives the egui editor.
 
 use nih_plug::prelude::*;
+use nih_plug_egui::EguiState;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -82,10 +83,14 @@ impl Plugin for SquelchBox {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        let scale = *self.params.ui_scale.lock();
+        let w = (crate::ui::BASE_W as f32 * scale).round() as u32;
+        let h = (crate::ui::BASE_H as f32 * scale).round() as u32;
         crate::ui::create(
             self.params.clone(),
-            self.params.editor_state.clone(),
+            EguiState::from_size(w, h),
             self.kbd_queue.clone(),
+            scale,
         )
     }
 

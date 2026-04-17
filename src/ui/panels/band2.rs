@@ -37,8 +37,6 @@ pub fn draw_band2(
 
         p.text(Pos2::new(track_x0, bank_y), egui::Align2::LEFT_TOP, "BANK",
             egui::FontId::new(7.0, egui::FontFamily::Monospace), SILVER_SHADOW);
-        p.text(Pos2::new(px, lbl_y + 28.0), egui::Align2::CENTER_TOP, "SLIDE",
-            egui::FontId::new(7.5, egui::FontFamily::Monospace), INK);
 
         let mode_rect = Rect::from_min_size(Pos2::new(mx, top + BAND1_BOT + 6.0), Vec2::new(84.0, 104.0));
         p.rect_filled(mode_rect.translate(Vec2::new(0.0, 1.0)), 3.0, SILVER_LIGHT);
@@ -160,7 +158,9 @@ pub fn draw_band2(
             .on_hover_cursor(egui::CursorIcon::PointingHand)
             .on_hover_text("Octave up — selected step +12 semitones.\nKeyboard: Shift+Up");
         let p = ui.painter();
-        p.text(Pos2::new(px - 8.0, oct_y - 2.0), egui::Align2::CENTER_BOTTOM,
+        p.text(Pos2::new(px, oct_y - 2.0), egui::Align2::CENTER_BOTTOM,
+            "SLIDE", egui::FontId::new(6.5, egui::FontFamily::Monospace), SILVER_SHADOW);
+        p.text(Pos2::new(px + 30.0, oct_y + 5.0), egui::Align2::LEFT_CENTER,
             "OCT", egui::FontId::new(6.5, egui::FontFamily::Monospace), SILVER_SHADOW);
         for (r, lbl) in [(oct_dn, "▼"), (oct_up, "▲")] {
             p.rect_filled(r, 2.0, BTN_FACE);

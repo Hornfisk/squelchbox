@@ -9,8 +9,6 @@
 //! Both oscillators are monophonic, stateful, and RT-safe: `tick(freq)` is
 //! branch-light, never allocates, and returns a single sample in `[-1, 1]`.
 
-use std::f32::consts::PI;
-
 /// PolyBLEP correction term for a normalised phase `t` in `[0, 1)` and
 /// per-sample phase increment `dt`. Adds up to `1` near the wrap point
 /// (`t → 0`) and matches the subtraction point just before (`t → 1`).
@@ -60,11 +58,13 @@ impl BlepSaw {
     }
 }
 
-/// Anti-aliased square (50% duty). Bipolar output, unity amplitude.
+/// Anti-aliased narrow pulse (~30% duty). Bipolar output, unity amplitude.
 ///
-/// Implemented as the difference of two blep'd saws offset by 0.5:
-/// `square(t) = saw(t) - saw(t + 0.5)`. The two PolyBLEP corrections land
-/// on the falling and rising edges respectively.
+/// The TB-303's "square" is a narrow pulse, not a 50% square wave. The
+/// ~30% duty cycle creates the characteristic thin, buzzy timbre. PolyBLEP
+/// corrections are applied at the rising edge (phase=0) and the falling
+/// edge (phase=DUTY). The AC-coupling HPF in voice.rs adds the exponential
+/// droop that completes the authentic waveform shape.
 pub struct BlepSquare {
     phase: f32,
     sample_rate: f32,
@@ -85,14 +85,15 @@ impl BlepSquare {
 
     #[inline]
     pub fn tick(&mut self, freq_hz: f32) -> f32 {
+        // ~30% duty cycle matches the TB-303's narrow pulse character.
+        const DUTY: f32 = 0.30;
         let dt = (freq_hz / self.sample_rate).clamp(0.0, 0.49);
-        let mut out = if self.phase < 0.5 { 1.0 } else { -1.0 };
+        let mut out = if self.phase < DUTY { 1.0 } else { -1.0 };
+        // Rising-edge PolyBLEP correction at phase = 0.
         out += poly_blep(self.phase, dt);
-        let phase2 = if self.phase + 0.5 >= 1.0 {
-            self.phase - 0.5
-        } else {
-            self.phase + 0.5
-        };
+        // Falling-edge PolyBLEP correction at phase = DUTY.
+        let phase2 = self.phase - DUTY;
+        let phase2 = if phase2 < 0.0 { phase2 + 1.0 } else { phase2 };
         out -= poly_blep(phase2, dt);
         self.phase += dt;
         if self.phase >= 1.0 {
@@ -101,6 +102,9 @@ impl BlepSquare {
         out
     }
 }
+
+#[cfg(test)]
+use std::f32::consts::PI;
 
 /// Single-bin Goertzel power estimator — copied from slammer's DSP test
 /// helper. Measures the energy of a specific frequency bin in `samples`,
@@ -193,15 +197,23 @@ mod tests {
     }
 
     #[test]
-    fn square_has_no_dc() {
-        // A 50% square should integrate to near zero over an integer
-        // number of periods.
+    fn square_has_narrow_pulse_shape() {
+        // The 303 square is a ~30% duty pulse. Verify by checking that the
+        // waveform spends more time at the low level than the high level.
         let freq = 200.0;
         let period_samples = (SR / freq) as usize;
-        let n_periods = 200;
-        let out = render_square(freq, period_samples * n_periods);
-        let mean: f32 = out.iter().sum::<f32>() / out.len() as f32;
-        assert!(mean.abs() < 0.02, "square DC offset too high: {mean}");
+        let out = render_square(freq, period_samples * 200);
+        // Skip first period to let transients settle.
+        let samples = &out[period_samples..];
+        let n_high = samples.iter().filter(|&&s| s > 0.0).count();
+        let n_low = samples.iter().filter(|&&s| s < 0.0).count();
+        let duty = n_high as f32 / (n_high + n_low) as f32;
+        // Should be near 30%; allow ±5% tolerance.
+        assert!(
+            (duty - 0.30).abs() < 0.05,
+            "pulse duty cycle should be ~30%, got {:.1}%",
+            duty * 100.0
+        );
     }
 
     #[test]

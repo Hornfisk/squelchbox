@@ -1,10 +1,10 @@
 //! Monophonic 303 voice: oscillator + diode ladder filter + envelopes + pitch control.
 //!
-//! Assembles `BlepSaw`/`BlepSquare` → `DiodeLadder3Pole` (oversampled 2×)
+//! Assembles `BlepSaw`/`BlepSquare` → `DiodeLadder4Pole` (oversampled 2×)
 //! → `AmpEnv`/`FilterEnv`/`AccentEnv` into a per-sample render pipeline.
 
 use crate::dsp::envelope::{AccentEnv, AmpEnv, FilterEnv};
-use crate::dsp::filter_diode::DiodeLadder3Pole;
+use crate::dsp::filter_diode::DiodeLadder4Pole;
 use crate::dsp::oscillator::{BlepSaw, BlepSquare};
 use crate::dsp::oversampler::Halfband2x;
 
@@ -126,7 +126,7 @@ impl Default for VoiceParams {
 pub struct Voice303 {
     saw: BlepSaw,
     square: BlepSquare,
-    filter: DiodeLadder3Pole,
+    filter: DiodeLadder4Pole,
     amp_env: AmpEnv,
     filter_env: FilterEnv,
     accent_env: AccentEnv,
@@ -164,6 +164,13 @@ pub struct Voice303 {
     env_mod: f32,
     accent_amount: f32,
     accent_active: bool,
+    /// AC-coupling HPF state for the oscillator output. Models the
+    /// capacitor between the VCO and VCF in the real circuit — flat
+    /// sections of the waveform droop exponentially, giving the 303
+    /// its characteristic buzzy/thin square and slightly brightened saw.
+    osc_ac_x1: f32,
+    osc_ac_y1: f32,
+    osc_ac_r: f32,
 }
 
 impl Voice303 {
@@ -171,7 +178,7 @@ impl Voice303 {
         Self {
             saw: BlepSaw::new(sample_rate),
             square: BlepSquare::new(sample_rate),
-            filter: DiodeLadder3Pole::new(sample_rate),
+            filter: DiodeLadder4Pole::new(sample_rate),
             amp_env: AmpEnv::new(sample_rate),
             filter_env: FilterEnv::new(sample_rate),
             accent_env: AccentEnv::new(sample_rate),
@@ -194,11 +201,15 @@ impl Voice303 {
             env_mod: 0.6,
             accent_amount: 0.6,
             accent_active: false,
+            osc_ac_x1: 0.0,
+            osc_ac_y1: 0.0,
+            osc_ac_r: (-std::f32::consts::TAU * 30.0 / sample_rate).exp(),
         }
     }
 
     pub fn set_sample_rate(&mut self, sr: f32) {
         self.sample_rate = sr;
+        self.osc_ac_r = (-std::f32::consts::TAU * 30.0 / sr).exp();
         // Envelopes always run at the base rate.
         self.amp_env.set_sample_rate(sr);
         self.filter_env.set_sample_rate(sr);
@@ -214,6 +225,8 @@ impl Voice303 {
         self.square.reset();
         self.filter.reset();
         self.oversampler.reset();
+        self.osc_ac_x1 = 0.0;
+        self.osc_ac_y1 = 0.0;
     }
 
     /// Select the oversampling tier. Called from `plugin.rs::initialize`
@@ -356,18 +369,15 @@ impl Voice303 {
         self.current_freq_hz = midi_f_to_hz(drifted_semitones);
 
         // Cutoff modulation. Env Mod opens upward in octaves. Accent adds
-        // a little more on top. Drift then multiplies the final cutoff
-        // by a small ± ratio.
-        let accent_cutoff_octaves = if self.accent_active {
-            self.accent_amount * acc * 2.0
-        } else {
-            0.0
-        };
+        // a little more on top (residual cap charge affects all notes, not
+        // just accented ones — authentic 303 D24/C13 behaviour). Drift
+        // then multiplies the final cutoff by a small ± ratio.
+        let accent_cutoff_octaves = self.accent_amount * acc * 2.0;
         let cutoff_octaves = self.env_mod * env_f * 4.0 + accent_cutoff_octaves;
         // Cap the post-modulation cutoff at ~8 kHz: the real 303's diode
         // ladder loses transistor bandwidth above this and the front-panel
         // CUTOFF knob doesn't reach higher anyway. Going further is also
-        // where the unit-delay-feedback approximation in DiodeLadder3Pole
+        // where the unit-delay-feedback approximation in DiodeLadder4Pole
         // starts losing phase margin and detuning the resonance peak.
         const FC_CEILING: f32 = 8_000.0;
         let cutoff_hz = (self.base_cutoff_hz
@@ -399,21 +409,39 @@ impl Voice303 {
         // it only bites when resonance or accent drives the signal hot.
         let filtered = vca_sat(filtered);
 
-        let accent_amp_boost = if self.accent_active {
-            1.0 + self.accent_amount * acc
-        } else {
-            1.0
-        };
-        filtered * env_a * accent_amp_boost
+        // Accent amplitude boost: residual cap charge affects all notes
+        // (authentic 303 — cap only charges on accented steps but its
+        // remaining voltage lifts both accented and unaccented notes).
+        let accent_amp_boost = 1.0 + self.accent_amount * acc;
+
+        // Resonance-to-VCA compensation: the real 303 feeds a fraction of
+        // the resonance pot voltage to the VCA to offset the volume drop
+        // that a high-Q filter produces.
+        const RESO_VCA_SCALE: f32 = 0.35;
+        let reso_comp = 1.0 + RESO_VCA_SCALE * self.resonance;
+
+        filtered * env_a * accent_amp_boost * reso_comp
     }
 
-    /// Single oscillator step at the base rate.
+    /// Single oscillator step at the base rate, with AC-coupling HPF.
     #[inline]
     fn tick_osc(&mut self) -> f32 {
-        match self.waveform {
+        let raw = match self.waveform {
             Waveform::Saw => self.saw.tick(self.current_freq_hz),
             Waveform::Square => self.square.tick(self.current_freq_hz),
-        }
+        };
+        self.ac_couple(raw)
+    }
+
+    /// 1-pole HPF (~30 Hz) modelling the coupling capacitor between VCO
+    /// and VCF. Causes flat waveform sections to droop exponentially —
+    /// the source of the 303 square's distinctive thin/buzzy character.
+    #[inline(always)]
+    fn ac_couple(&mut self, x: f32) -> f32 {
+        let y = x - self.osc_ac_x1 + self.osc_ac_r * self.osc_ac_y1;
+        self.osc_ac_x1 = x;
+        self.osc_ac_y1 = y;
+        y
     }
 
     /// Run the oscillator → diode ladder block at 2× the base sample
@@ -435,6 +463,9 @@ impl Voice303 {
                 self.square.tick(self.current_freq_hz),
             ),
         };
+        // Apply AC coupling to each oversampled oscillator output sample.
+        let s0 = self.ac_couple(s0);
+        let s1 = self.ac_couple(s1);
         let y0 = self.filter.process(s0);
         let y1 = self.filter.process(s1);
         self.oversampler.downsample2([y0, y1])
