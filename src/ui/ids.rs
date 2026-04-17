@@ -12,6 +12,7 @@ pub fn toast_copy()      -> egui::Id { egui::Id::new("sqb_toast_copy") }
 pub fn last_persist_rev()-> egui::Id { egui::Id::new("sqb_last_persisted_rev") }
 pub fn kbd_focus()       -> egui::Id { egui::Id::new("sqb_kbd_focus") }
 pub fn prev_keys()       -> egui::Id { egui::Id::new("sqb_prev_keys") }
+pub fn sounding_keys()   -> egui::Id { egui::Id::new("sqb_sounding_keys") }
 pub fn t_held()          -> egui::Id { egui::Id::new("sqb_t_held") }
 pub fn fx_dist_anim()    -> egui::Id { egui::Id::new("sqb_fx_dist_anim") }
 pub fn dist_toggle()     -> egui::Id { egui::Id::new("sqb_dist_toggle") }

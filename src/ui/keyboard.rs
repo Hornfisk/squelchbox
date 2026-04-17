@@ -72,6 +72,14 @@ pub fn handle_keyboard(ctx: &egui::Context, kbd: &KbdQueue) {
         (c, i.events.len(), i.modifiers.shift)
     });
     kbd.set_diag(events_len, cur.len(), focused);
+    // Keys that have an outstanding gate_on we pushed to the audio
+    // thread. Used to emit gate_off once the last note key is released,
+    // so held notes don't sustain forever (AmpEnv is gate-driven and
+    // only releases on an explicit `on: false` event).
+    let sounding_id = ids::sounding_keys();
+    let mut sounding: std::collections::HashSet<egui::Key> = ctx
+        .data(|d| d.get_temp::<std::collections::HashSet<egui::Key>>(sounding_id))
+        .unwrap_or_default();
     let edit_mode = kbd.selected_step().is_some();
     for key in cur.difference(&prev) {
         kbd.mark_key(&format!("{key:?}"));
@@ -101,6 +109,7 @@ pub fn handle_keyboard(ctx: &egui::Context, kbd: &KbdQueue) {
                     if !s.rest {
                         let velocity = if s.accent { 0.95 } else { 0.7 };
                         kbd.push(KbdEvent { on: true, note: s.semitone, velocity });
+                        sounding.insert(*key);
                     }
                 }
                 continue;
@@ -116,6 +125,7 @@ pub fn handle_keyboard(ctx: &egui::Context, kbd: &KbdQueue) {
                     });
                     let velocity = if shift { 0.95 } else { 0.7 };
                     kbd.push(KbdEvent { on: true, note, velocity });
+                    sounding.insert(*key);
                 }
                 continue;
             }
@@ -151,9 +161,19 @@ pub fn handle_keyboard(ctx: &egui::Context, kbd: &KbdQueue) {
                     let note = (base + semi).clamp(0, 127) as u8;
                     let velocity = if shift { 0.95 } else { 0.7 };
                     kbd.push(KbdEvent { on: true, note, velocity });
+                    sounding.insert(*key);
                 }
             }
         }
+    }
+
+    // Monosynth gate-release: drop any sounding keys that are no
+    // longer held, and when the set transitions to empty push a single
+    // `on: false` so the voice's amp env releases.
+    let was_sounding = !sounding.is_empty();
+    sounding.retain(|k| cur.contains(k));
+    if was_sounding && sounding.is_empty() {
+        kbd.push(KbdEvent { on: false, note: 0, velocity: 0.0 });
     }
     // ── T-held tracking for audition-while-scrubbing ──
     let t_id = ids::t_held();
@@ -182,6 +202,7 @@ pub fn handle_keyboard(ctx: &egui::Context, kbd: &KbdQueue) {
     ctx.data_mut(|d| {
         d.insert_temp(prev_id, cur);
         d.insert_temp(t_id, t_held);
+        d.insert_temp(sounding_id, sounding);
     });
 }
 

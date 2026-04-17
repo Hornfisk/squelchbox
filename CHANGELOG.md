@@ -2,6 +2,13 @@
 
 All notable changes to SquelchBox are documented here.
 
+## [0.1.3] — 2026-04-17
+
+Bugfix release.
+
+### Fixed
+- **Keyboard preview sustained forever** — pressing a note key (`Z`/`X`/`C`/…) or `T` to audition the selected step pushed a gate-on with no corresponding gate-off, so the voice's amp env held at unity indefinitely. Keyboard input now tracks which keys are gating the voice and pushes a single gate-off once the last note key is released, matching monosynth key-release semantics.
+
 ## [0.1.2] — 2026-04-17
 
 Authentic TB-303 DSP pass based on hardware-level expert feedback.
