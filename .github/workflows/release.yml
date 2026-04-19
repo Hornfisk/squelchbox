@@ -53,8 +53,8 @@ jobs:
           BUILD_TARGET: ${{ matrix.target }}
         run: cargo xtask bundle squelchbox --release --target "$BUILD_TARGET"
 
-      - name: Package artifacts (Unix)
-        if: runner.os != 'Windows'
+      - name: Package artifacts (Linux)
+        if: runner.os == 'Linux'
         env:
           BUILD_TARGET: ${{ matrix.target }}
           ARTIFACT_NAME: ${{ matrix.artifact }}
@@ -64,10 +64,65 @@ jobs:
           cp -r target/bundled/squelchbox.clap staging/
           cp "target/${BUILD_TARGET}/release/squelchbox-standalone" staging/ || true
           cp install.sh staging/
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
-            cp scripts/squelchbox-macos.sh staging/
-          fi
+          cat > staging/"START HERE.txt" <<'EOF'
+          SquelchBox — Linux install
+
+          1. Open a terminal in this folder.
+          2. Run:  bash ./install.sh
+          3. Rescan plugins in your DAW.
+
+          Where things land:
+            VST3        ~/.vst3/squelchbox.vst3
+            CLAP        ~/.clap/squelchbox.clap
+            Standalone  ~/.local/bin/squelchbox
+
+          Standalone sample rate mismatch? Try:
+            squelchbox --sample-rate 48000 --period-size 512
+
+          Problems?  https://github.com/Hornfisk/squelchbox/issues
+          EOF
           cd staging && tar czf "../${ARTIFACT_NAME}.tar.gz" * && cd ..
+
+      - name: Package artifacts (macOS)
+        if: runner.os == 'macOS'
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+          ARTIFACT_NAME: ${{ matrix.artifact }}
+        run: |
+          mkdir -p staging
+          cp -r target/bundled/squelchbox.vst3 staging/
+          cp -r target/bundled/squelchbox.clap staging/
+          cp "target/${BUILD_TARGET}/release/squelchbox-standalone" staging/ || true
+          cp install.sh staging/
+          cp scripts/squelchbox-macos.sh staging/
+          cat > staging/"START HERE.txt" <<'EOF'
+          SquelchBox — macOS install
+
+          1. Double-click this folder to open it (if you haven't already).
+          2. Right-click install.sh  >  Open With  >  Terminal
+             (Or: open Terminal, type  bash , drag install.sh onto the window, press Enter.)
+          3. Enter your Mac password when asked — the script only writes to your
+             own Library folder, no admin access needed.
+          4. Rescan plugins in your DAW.
+
+          ABOUT THE SECURITY WARNING:
+          The binaries are unsigned because an Apple Developer certificate costs
+          money and we're a small studio. The install script automatically removes
+          the quarantine flag so your DAW can load the plugin. If your DAW still
+          refuses to scan it, right-click the .vst3 bundle in
+          ~/Library/Audio/Plug-Ins/VST3 and choose Open.
+
+          Where things land:
+            VST3        ~/Library/Audio/Plug-Ins/VST3/squelchbox.vst3
+            CLAP        ~/Library/Audio/Plug-Ins/CLAP/squelchbox.clap
+            Standalone  ~/.local/bin/squelchbox
+
+          For the standalone app, launch it via squelchbox-macos.sh (included) —
+          runs with the correct CoreAudio buffer size.
+
+          Problems?  https://github.com/Hornfisk/squelchbox/issues
+          EOF
+          cd staging && zip -r "../${ARTIFACT_NAME}.zip" * && cd ..
 
       - name: Package artifacts (Windows)
         if: runner.os == 'Windows'
@@ -81,6 +136,27 @@ jobs:
           cp -r target/bundled/squelchbox.clap staging/
           cp "target/${BUILD_TARGET}/release/squelchbox-standalone.exe" staging/ || true
           cp install.bat staging/
+          cat > staging/"START HERE.txt" <<'EOF'
+          SquelchBox — Windows install
+
+          1. RIGHT-click install.bat  >  Run as administrator
+             (Admin is needed because VST3/CLAP live under Program Files.)
+          2. A black window runs for a few seconds. When it says "Done", press a key.
+          3. Rescan plugins in your DAW.
+
+          ABOUT THE SMARTSCREEN WARNING:
+          Windows will pop up "Windows protected your PC" because the installer
+          is not signed with an Extended Validation certificate. Click
+          More info  >  Run anyway . The binaries are open source; you can verify
+          the SHA-256 checksum against SHA256SUMS.txt in the release.
+
+          Where things land:
+            VST3        C:\Program Files\Common Files\VST3\squelchbox.vst3
+            CLAP        C:\Program Files\Common Files\CLAP\squelchbox.clap
+            Standalone  %LocalAppData%\SquelchBox\  (launch via SquelchBox.bat)
+
+          Problems?  https://github.com/Hornfisk/squelchbox/issues
+          EOF
           cd staging && 7z a "../${ARTIFACT_NAME}.zip" * && cd ..
 
       - name: Upload artifact

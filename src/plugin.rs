@@ -83,14 +83,14 @@ impl Plugin for SquelchBox {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        let scale = *self.params.ui_scale.lock();
-        let w = (crate::ui::BASE_W as f32 * scale).round() as u32;
-        let h = (crate::ui::BASE_H as f32 * scale).round() as u32;
+        // Actual scaling is done by nih-plug's host/standalone via
+        // `Editor::set_scale_factor` (→ baseview's `WindowScalePolicy`).
+        // In standalone, pass `--dpi-scale N` on the command line; the
+        // launcher script does this automatically from ui_scale.txt.
         crate::ui::create(
             self.params.clone(),
-            EguiState::from_size(w, h),
+            EguiState::from_size(crate::ui::BASE_W, crate::ui::BASE_H),
             self.kbd_queue.clone(),
-            scale,
         )
     }
 

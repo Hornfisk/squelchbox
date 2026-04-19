@@ -27,5 +27,9 @@ nih_export_clap!(plugin::SquelchBox);
 
 /// Entry point for the standalone binary. Called from `src/main.rs`.
 pub fn run_standalone() {
+    // Marker so `SquelchBoxParams::default()` can pick a standalone-
+    // appropriate default for `sync_mode` (Internal) instead of the
+    // DAW-appropriate default (Host).
+    std::env::set_var("SQUELCHBOX_STANDALONE", "1");
     nih_export_standalone::<plugin::SquelchBox>();
 }

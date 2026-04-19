@@ -2,6 +2,24 @@
 
 All notable changes to SquelchBox are documented here.
 
+## [0.2.0] — 2026-04-19
+
+UX polish + DSP authenticity pass.
+
+### Added
+- **FX panel reorg** — DIST, DELAY, and REVERB now sit in a single unified strip in the middle band, reading left-to-right as one signal-chain section instead of being scattered between the top-left brand area and the mid-strip.
+- **Per-step note labels in sequencer** — every active step shows its pitch as a small note name (`C3`, `F#4`, …) below the slider, accent-colored.
+- **Tuning knob microtuning** — Tuning snaps to whole semitones by default; hold Shift while dragging for continuous (microtuning) motion. Suits both step-sequence acid use and detune/expressive use.
+- **Auto-default SYNC mode** — standalone defaults to `INTERNAL` (free-run sequencer), plugin defaults to `HOST` (DAW transport). Persisted state in DAW projects still wins on subsequent loads.
+
+### Changed
+- **Accent envelope** — rewritten as a cap-discharge source (80 ms RC) into a 1-pole LP follower (4 ms). Trigger snaps the cap to 1.0 without resetting the LP, preserving the cap-accumulation behavior on rapid successive accents while smoothing the attack curve.
+- **Resonance bass-strip** — frequency-dependent post-VCF HPF (30 Hz at reso=0 → ~250 Hz at reso=1, quadratic taper) strips the bass swell that builds up at high Q without thinning low-Q passages.
+- **SYNC selector** — three-button stack collapsed into a single cycling button (`INT` → `HOST` → `MIDI`), freeing horizontal space in the middle band for the FX reorg.
+
+### Fixed
+- **Sequencer drag-paint latching** — dragging horizontally across step cells while drawing pitches now paints the cell the pointer is actually over, instead of latching to the source cell. Click-and-drag pattern entry works as expected.
+
 ## [0.1.3] — 2026-04-17
 
 Bugfix release.

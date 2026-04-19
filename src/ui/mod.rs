@@ -25,14 +25,12 @@ pub fn create(
     params: Arc<SquelchBoxParams>,
     editor_state: Arc<EguiState>,
     kbd: Arc<KbdQueue>,
-    scale: f32,
 ) -> Option<Box<dyn Editor>> {
     create_egui_editor(
         editor_state,
         (),
         move |ctx, _state| {
             ctx.set_fonts(egui::FontDefinitions::default());
-            ctx.set_pixels_per_point(scale);
         },
         move |ctx, setter, _state| {
             keyboard::handle_keyboard(ctx, &kbd);

@@ -40,6 +40,31 @@ pub fn squelchbox_hidden_presets_file() -> PathBuf {
     squelchbox_data_dir().join("hidden_presets.txt")
 }
 
+pub fn squelchbox_ui_scale_file() -> PathBuf {
+    squelchbox_data_dir().join("ui_scale.txt")
+}
+
+/// Read the persisted UI scale. Returns `1.0` if the file is missing or
+/// unreadable. The standalone wrapper doesn't save `#[persist]` params
+/// between sessions, so we serialize this one by hand.
+pub fn load_ui_scale() -> f32 {
+    std::fs::read_to_string(squelchbox_ui_scale_file())
+        .ok()
+        .and_then(|s| s.trim().parse::<f32>().ok())
+        .map(|v| v.clamp(1.0, 3.0))
+        .unwrap_or(1.0)
+}
+
+/// Write the UI scale to disk. Silently ignores IO failures — a lost
+/// preference is never worth crashing over.
+pub fn save_ui_scale(scale: f32) {
+    let path = squelchbox_ui_scale_file();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, format!("{scale}\n"));
+}
+
 fn fallback_dir() -> PathBuf {
     std::env::temp_dir().join("squelchbox")
 }

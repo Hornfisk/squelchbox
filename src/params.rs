@@ -207,7 +207,9 @@ impl Default for SquelchBoxParams {
         Self {
             editor_state: EguiState::from_size(crate::ui::BASE_W, crate::ui::BASE_H),
             pattern_state: Arc::new(parking_lot::Mutex::new(String::new())),
-            ui_scale: Arc::new(parking_lot::Mutex::new(1.0_f32)),
+            ui_scale: Arc::new(parking_lot::Mutex::new(
+                crate::util::paths::load_ui_scale(),
+            )),
 
             master_volume: FloatParam::new(
                 "Master Volume",
@@ -224,7 +226,14 @@ impl Default for SquelchBoxParams {
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
 
             waveform: EnumParam::new("Waveform", WaveformParam::Saw),
-            sync_mode: EnumParam::new("Sync", SyncMode::Internal),
+            sync_mode: EnumParam::new(
+                "Sync",
+                if std::env::var_os("SQUELCHBOX_STANDALONE").is_some() {
+                    SyncMode::Internal
+                } else {
+                    SyncMode::Host
+                },
+            ),
 
             tuning: FloatParam::new(
                 "Tuning",

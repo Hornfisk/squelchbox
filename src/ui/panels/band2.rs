@@ -38,44 +38,45 @@ pub fn draw_band2(
         p.text(Pos2::new(track_x0, bank_y), egui::Align2::LEFT_TOP, "BANK",
             egui::FontId::new(7.0, egui::FontFamily::Monospace), SILVER_SHADOW);
 
-        let mode_rect = Rect::from_min_size(Pos2::new(mx, top + BAND1_BOT + 6.0), Vec2::new(84.0, 104.0));
+        let mode_rect = Rect::from_min_size(Pos2::new(mx, top + BAND1_BOT + 6.0), Vec2::new(56.0, 50.0));
         p.rect_filled(mode_rect.translate(Vec2::new(0.0, 1.0)), 3.0, SILVER_LIGHT);
         p.rect_filled(mode_rect, 3.0, lerp_color(SILVER_MID, SILVER_DARK, 0.3));
         p.rect_stroke(mode_rect, 3.0, Stroke::new(1.0, SILVER_SHADOW), egui::StrokeKind::Inside);
-        p.text(Pos2::new(mx + 42.0, top + BAND1_BOT + 8.0), egui::Align2::CENTER_TOP, "SYNC",
+        p.text(Pos2::new(mx + 28.0, top + BAND1_BOT + 8.0), egui::Align2::CENTER_TOP, "SYNC",
             egui::FontId::new(7.5, egui::FontFamily::Monospace), INK);
 
         p.text(Pos2::new(vx, lbl_y), egui::Align2::CENTER_TOP, "VOLUME",
             egui::FontId::new(7.5, egui::FontFamily::Monospace), INK);
     }
 
-    // ── SYNC mode buttons ──
+    // ── SYNC cycler (single button, click to cycle modes) ──
     let cur_mode = params.sync_mode.value();
-    let modes = [
-        (SyncMode::Internal, "INTERNAL", "Internal — free-run sequencer.\nRUN/STOP and TEMPO knob drive playback.\nIgnores DAW transport."),
-        (SyncMode::Host,     "▶ HOST",   "Host — follow the DAW transport.\nTempo slaved to host BPM, plays when host plays.\nResets to step 1 on every host play press."),
-        (SyncMode::Midi,     "MIDI IN",  "MIDI — sequencer disabled.\nVoice triggered only by incoming MIDI notes\nfrom the host or computer keyboard."),
-    ];
-    for (j, (mode, lbl, tip)) in modes.iter().enumerate() {
-        let by = top + BAND1_BOT + 24.0 + j as f32 * 26.0;
-        let br = Rect::from_min_size(Pos2::new(mx + 4.0, by), Vec2::new(76.0, 18.0));
-        let id = ids::sync_btn(j);
-        let resp = ui.interact(br, id, egui::Sense::click())
-            .on_hover_cursor(egui::CursorIcon::PointingHand)
-            .on_hover_text(*tip);
-        let active = cur_mode == *mode;
+    let (lbl, tip) = match cur_mode {
+        SyncMode::Internal => ("INT",  "Internal — free-run sequencer (RUN/STOP + TEMPO).\nClick to cycle: INT → HOST → MIDI."),
+        SyncMode::Host     => ("HOST", "Host — follow DAW transport, tempo slaved to host BPM.\nClick to cycle: INT → HOST → MIDI."),
+        SyncMode::Midi     => ("MIDI", "MIDI — sequencer disabled, voice on incoming MIDI notes.\nClick to cycle: INT → HOST → MIDI."),
+    };
+    let btn_rect = Rect::from_min_size(Pos2::new(mx + 4.0, top + BAND1_BOT + 22.0), Vec2::new(48.0, 30.0));
+    let resp = ui.interact(btn_rect, ids::sync_btn(0), egui::Sense::click())
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(tip);
+    {
         let p = ui.painter();
-        p.rect_filled(br.translate(Vec2::new(0.0, 1.0)), 2.0, INK);
-        p.rect_filled(br, 2.0, if active { RED } else { BTN_FACE });
-        p.rect_stroke(br, 2.0, Stroke::new(0.8, SILVER_SHADOW), egui::StrokeKind::Inside);
-        p.text(br.center(), egui::Align2::CENTER_CENTER, *lbl,
-            egui::FontId::new(7.5, egui::FontFamily::Monospace),
-            if active { Color32::WHITE } else { BTN_LBL });
-        if resp.clicked() {
-            setter.begin_set_parameter(&params.sync_mode);
-            setter.set_parameter(&params.sync_mode, *mode);
-            setter.end_set_parameter(&params.sync_mode);
-        }
+        p.rect_filled(btn_rect.translate(Vec2::new(0.0, 1.0)), 2.0, INK);
+        p.rect_filled(btn_rect, 2.0, RED);
+        p.rect_stroke(btn_rect, 2.0, Stroke::new(0.8, SILVER_SHADOW), egui::StrokeKind::Inside);
+        p.text(btn_rect.center(), egui::Align2::CENTER_CENTER, lbl,
+            egui::FontId::new(10.0, egui::FontFamily::Monospace), Color32::WHITE);
+    }
+    if resp.clicked() {
+        let next = match cur_mode {
+            SyncMode::Internal => SyncMode::Host,
+            SyncMode::Host     => SyncMode::Midi,
+            SyncMode::Midi     => SyncMode::Internal,
+        };
+        setter.begin_set_parameter(&params.sync_mode);
+        setter.set_parameter(&params.sync_mode, next);
+        setter.end_set_parameter(&params.sync_mode);
     }
 
     // ── BANK I/II/III/IV ──

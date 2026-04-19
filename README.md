@@ -19,8 +19,8 @@ One-click downloads for the [latest release](https://github.com/Hornfisk/squelch
 | Platform | Download |
 |----------|----------|
 | **Windows** (x86_64) | [squelchbox-windows-x86_64.zip](https://github.com/Hornfisk/squelchbox/releases/latest/download/squelchbox-windows-x86_64.zip) |
-| **macOS** (Apple Silicon) | [squelchbox-macos-arm64.tar.gz](https://github.com/Hornfisk/squelchbox/releases/latest/download/squelchbox-macos-arm64.tar.gz) |
-| **macOS** (Intel) | [squelchbox-macos-x86_64.tar.gz](https://github.com/Hornfisk/squelchbox/releases/latest/download/squelchbox-macos-x86_64.tar.gz) |
+| **macOS** (Apple Silicon) | [squelchbox-macos-arm64.zip](https://github.com/Hornfisk/squelchbox/releases/latest/download/squelchbox-macos-arm64.zip) |
+| **macOS** (Intel) | [squelchbox-macos-x86_64.zip](https://github.com/Hornfisk/squelchbox/releases/latest/download/squelchbox-macos-x86_64.zip) |
 | **Linux** (x86_64) | [squelchbox-linux-x86_64.tar.gz](https://github.com/Hornfisk/squelchbox/releases/latest/download/squelchbox-linux-x86_64.tar.gz) |
 | Checksums | [SHA256SUMS.txt](https://github.com/Hornfisk/squelchbox/releases/latest/download/SHA256SUMS.txt) |
 
@@ -54,18 +54,13 @@ Installs to `~/.vst3/`, `~/.clap/`, and `~/.local/bin/`.
 
 ### macOS
 
-```bash
-tar xzf squelchbox-macos-arm64.tar.gz   # or macos-x86_64
-./install.sh
-# Rescan plugins in your DAW
-```
+1. Double-click the downloaded `.zip` to extract it.
+2. Right-click `install.sh` → Open With → Terminal (or drag it into a Terminal window).
+3. Rescan plugins in your DAW.
 
 Installs to `~/Library/Audio/Plug-Ins/VST3/`, `~/Library/Audio/Plug-Ins/CLAP/`, and `~/.local/bin/`.
 
-Binaries are unsigned. On first launch: right-click > Open, or run:
-```bash
-xattr -dr com.apple.quarantine squelchbox-standalone
-```
+The binaries are unsigned. `install.sh` auto-removes the `com.apple.quarantine` xattr from everything it writes so Gatekeeper won't block your DAW from scanning the plugin. If the DAW still refuses, right-click the `.vst3` bundle in `~/Library/Audio/Plug-Ins/VST3/` and choose Open.
 
 **Standalone note:** Use the included `squelchbox-macos.sh` launcher instead of running `squelchbox-standalone` directly. CoreAudio delivers variable-sized buffers that can exceed the configured size, causing a panic in nih-plug's CPAL backend. The launcher passes `--period-size 4096` to accommodate this. See [nih-plug#266](https://github.com/robbert-vdh/nih-plug/issues/266).
 

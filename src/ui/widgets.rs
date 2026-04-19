@@ -93,6 +93,45 @@ pub fn param_knob<P: Param>(
 where
     P::Plain: Into<f32> + Copy,
 {
+    param_knob_inner(ui, setter, id, param, center, radius, label, format_value, label_chip, None)
+}
+
+/// Knob variant: snaps drag to integer steps in normalized space (e.g. 1.0/24.0
+/// for the ±12 semitone Tuning param). Holding Shift bypasses snap → continuous
+/// fine drag (microtuning).
+pub fn param_knob_snap<P: Param>(
+    ui: &mut egui::Ui,
+    setter: &ParamSetter,
+    id: egui::Id,
+    param: &P,
+    center: Pos2,
+    radius: f32,
+    label: &str,
+    format_value: impl Fn(f32) -> String,
+    label_chip: bool,
+    snap_norm: f32,
+) -> egui::Response
+where
+    P::Plain: Into<f32> + Copy,
+{
+    param_knob_inner(ui, setter, id, param, center, radius, label, format_value, label_chip, Some(snap_norm))
+}
+
+fn param_knob_inner<P: Param>(
+    ui: &mut egui::Ui,
+    setter: &ParamSetter,
+    id: egui::Id,
+    param: &P,
+    center: Pos2,
+    radius: f32,
+    label: &str,
+    format_value: impl Fn(f32) -> String,
+    label_chip: bool,
+    snap_norm: Option<f32>,
+) -> egui::Response
+where
+    P::Plain: Into<f32> + Copy,
+{
     let total = (radius + 10.0) * 2.0;
     let rect = Rect::from_center_size(center, Vec2::splat(total));
     let resp = ui
@@ -105,12 +144,14 @@ where
     }
     if resp.dragged() {
         let dy = -resp.drag_delta().y;
-        let speed = if ui.input(|i| i.modifiers.shift) {
-            0.0015
-        } else {
-            0.0065
-        };
+        let shift = ui.input(|i| i.modifiers.shift);
+        let speed = if shift { 0.0015 } else { 0.0065 };
         norm = (norm + dy * speed).clamp(0.0, 1.0);
+        if !shift {
+            if let Some(s) = snap_norm {
+                norm = ((norm / s).round() * s).clamp(0.0, 1.0);
+            }
+        }
         setter.set_parameter_normalized(param, norm);
     }
     if resp.drag_stopped() {

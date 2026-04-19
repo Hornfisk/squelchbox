@@ -1,7 +1,7 @@
 //! FX Left Zone: Distortion compartment with animated tray.
 
 use nih_plug::prelude::*;
-use nih_plug_egui::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
+use nih_plug_egui::egui::{self, Color32, Pos2, Rect, Vec2};
 
 use crate::params::SquelchBoxParams;
 use crate::ui::ids;
@@ -31,9 +31,9 @@ pub fn draw_fx_dist(
     }
     ui.ctx().data_mut(|d| d.insert_temp(anim_id, progress));
 
-    // Toggle position: below brand text.
-    let toggle_x = rect.left() + 28.0;
-    let toggle_y = top + 50.0;
+    // Toggle position: aligned with DELAY/REVERB in the unified FX strip.
+    let toggle_x = rect.left() + 345.0;
+    let toggle_y = top + BAND1_BOT + 10.0;
 
     // Draw toggle switch.
     let toggle_rect = Rect::from_min_size(
@@ -75,14 +75,6 @@ pub fn draw_fx_dist(
             label_color,
         );
 
-        // Separator line
-        p.line_segment(
-            [
-                Pos2::new(toggle_rect.right() + 36.0, toggle_rect.center().y),
-                Pos2::new(rect.left() + 320.0, toggle_rect.center().y),
-            ],
-            Stroke::new(0.5, SILVER_SHADOW),
-        );
     }
 
     if toggle_resp.clicked() {
@@ -91,12 +83,12 @@ pub fn draw_fx_dist(
         setter.end_set_parameter(&params.dist_enable);
     }
 
-    // DRIVE + MIX knobs (no surrounding tray — bare-on-faceplate).
+    // DRIVE + MIX knobs — aligned with DELAY/REVERB knob row (y ≈ top+162).
     if progress > 0.5 {
-        let kr = FX_KNOB_R * 0.9;
-        let knob_y = toggle_y + TOGGLE_H + 16.0;
+        let kr = FX_KNOB_R;
+        let knob_y = top + BAND1_BOT + 54.0; // matches fx_time knob_cy = zone_y+44
         let drive_cx = toggle_x + 30.0;
-        let mix_cx = toggle_x + 80.0;
+        let mix_cx = toggle_x + 70.0;
 
         {
             let p = ui.painter();

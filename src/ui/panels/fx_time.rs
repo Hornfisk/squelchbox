@@ -34,11 +34,11 @@ pub fn draw_fx_time(
     }
     ui.ctx().data_mut(|d| d.insert_temp(anim_id, progress));
 
-    let zone_x = rect.left() + 370.0;
+    let zone_x = rect.left() + 445.0;
     let zone_y = top + BAND1_BOT + 10.0;
-    let zone_w = 250.0;
+    let zone_w = 150.0;
     let toggle_y = zone_y;
-    let reverb_zone_x = rect.left() + 620.0;
+    let reverb_zone_x = rect.left() + 610.0;
 
     // ── Delay toggle ──
     let dly_toggle_rect = Rect::from_min_size(
@@ -123,19 +123,6 @@ pub fn draw_fx_time(
     // ── Content area ──
     let content_y = zone_y + 18.0;
     let content_h = 60.0;
-
-    // Branding (fades out)
-    if progress < 0.999 {
-        let alpha = ((1.0 - progress) * 255.0) as u8;
-        let brand_ink = Color32::from_rgba_unmultiplied(30, 30, 36, alpha);
-        let brand_sub = Color32::from_rgba_unmultiplied(90, 90, 96, alpha);
-        let p = ui.painter();
-        let name_cx = zone_x + zone_w * 0.5;
-        p.text(Pos2::new(name_cx, content_y + 4.0), egui::Align2::CENTER_TOP, "SB-303",
-            egui::FontId::new(26.0, egui::FontFamily::Proportional), brand_ink);
-        p.text(Pos2::new(name_cx, content_y + 34.0), egui::Align2::CENTER_TOP, "Computer Controlled",
-            egui::FontId::new(9.0, egui::FontFamily::Proportional), brand_sub);
-    }
 
     // ── Control rows (fade in) ──
     if progress > 0.3 {
