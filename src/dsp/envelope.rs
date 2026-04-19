@@ -8,9 +8,13 @@
 //! - `FilterEnv` — decay-only power curve from 1.0 → 0.0, driven by the
 //!   DECAY knob. Adjustable steepness exponent.
 //!
-//! - `AccentEnv` — 5 ms attack, 300 ms exponential RC decay. Does NOT
-//!   reset on re-trigger: successive accents accumulate charge, producing
-//!   the famous build-up wobble. Modulates amp + cutoff only (no reso).
+//! - `AccentEnv` — exponential cap-discharge driven through a one-pole
+//!   LP. Trigger snaps the cap voltage to 1.0 (modelling the fast charge
+//!   path through D24); the LP smooths the recharge edge into the
+//!   characteristic rounded "303 accent" curve. Cap voltage decays
+//!   between triggers, so successive accents that arrive before silence
+//!   land on a still-charged cap → the build-up wobble. Modulates amp +
+//!   cutoff only (no reso).
 
 /// Authentic TB-303 VEG: gate-driven with fixed shape.
 /// Attack (1 ms linear) → Hold at 1.0 → Release (8 ms flat + 8 ms linear).
@@ -183,34 +187,45 @@ impl FilterEnv {
     }
 }
 
-/// Authentic TB-303 accent envelope. 5 ms linear attack, ~300 ms
-/// exponential RC decay. Does NOT reset on re-trigger — successive
-/// accents accumulate on the still-charged cap, producing the famous
-/// build-up wobble. Modulates amp + cutoff only (no resonance).
+/// Authentic TB-303 accent envelope. Models the C13 cap voltage as an
+/// exponential decay (snapping to 1.0 on trigger via the D24 fast charge
+/// path) and runs that source through a one-pole LP follower to round
+/// the attack edge — the smooth "303 accent" curve.
+///
+/// Cap-accumulation is preserved: trigger only re-pins the cap, it does
+/// not reset the LP, so successive accents arriving before the cap has
+/// fully discharged produce the famous build-up wobble at the LP output.
+/// Modulates amp + cutoff only (no resonance).
 pub struct AccentEnv {
-    stage: AccStage,
-    value: f32,
-    attack_inc: f32,
+    cap: f32,
+    output: f32,
     decay_coef: f32,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum AccStage {
-    Idle,
-    Attack,
-    Decay,
+    lp_alpha: f32,
+    active: bool,
 }
 
 impl AccentEnv {
-    const DECAY_TAU: f32 = 0.300 / 6.9078; // ~43 ms tau → ~300 ms full decay
-    const ATTACK_MS: f32 = 5.0;
+    /// Cap discharge time-constant. ~6.9·τ to 1‰ ⇒ ~550 ms full decay
+    /// from a single accent; ~56% of charge survives a 16th-note step at
+    /// 130 BPM, which is what drives the build-up wobble.
+    const CAP_TAU_S: f32 = 0.080;
+    /// One-pole LP smoothing time-constant. Sets the rounded-attack
+    /// shape — too fast and accents click, too slow and they thump.
+    const LP_TAU_S: f32 = 0.004;
+    /// Analytical peak of `LP(decay)` for the chosen τ pair, used to
+    /// renormalise output to ≈[0,1] so the existing `accent_amount`
+    /// scaling at the call site keeps its full-range feel.
+    /// Derived once: peak = (τc/(τc-τlp))·(e^(-tp/τc) - e^(-tp/τlp))
+    /// where tp = (τc·τlp/(τc-τlp))·ln(τc/τlp). For (0.080, 0.004): ≈0.854.
+    const PEAK_NORM: f32 = 1.171;
 
     pub fn new(sample_rate: f32) -> Self {
         let mut env = Self {
-            stage: AccStage::Idle,
-            value: 0.0,
-            attack_inc: 0.0,
+            cap: 0.0,
+            output: 0.0,
             decay_coef: 0.0,
+            lp_alpha: 0.0,
+            active: false,
         };
         env.recalc_coeffs(sample_rate);
         env
@@ -221,44 +236,37 @@ impl AccentEnv {
     }
 
     fn recalc_coeffs(&mut self, sr: f32) {
-        let attack_samples = (Self::ATTACK_MS / 1000.0) * sr;
-        self.attack_inc = if attack_samples > 0.0 { 1.0 / attack_samples } else { 1.0 };
-        self.decay_coef = (-1.0 / (Self::DECAY_TAU * sr)).exp();
+        self.decay_coef = (-1.0 / (Self::CAP_TAU_S * sr)).exp();
+        self.lp_alpha = 1.0 - (-1.0 / (Self::LP_TAU_S * sr)).exp();
     }
 
     pub fn trigger(&mut self) {
-        if self.value >= 1.0 {
-            self.stage = AccStage::Decay;
-        } else {
-            self.stage = AccStage::Attack;
-        }
+        // D24 charges C13 fast through the accent rail — at audio rates
+        // this is effectively instantaneous, so snap the cap to full.
+        // The LP state is untouched, so the smoothed output continues
+        // from wherever it was → cap-accumulation between accents.
+        self.cap = 1.0;
+        self.active = true;
     }
 
     #[inline]
     pub fn tick(&mut self) -> f32 {
-        match self.stage {
-            AccStage::Idle => 0.0,
-            AccStage::Attack => {
-                self.value += self.attack_inc;
-                if self.value >= 1.0 {
-                    self.value = 1.0;
-                    self.stage = AccStage::Decay;
-                }
-                self.value
-            }
-            AccStage::Decay => {
-                self.value *= self.decay_coef;
-                if self.value < 1.0e-6 {
-                    self.value = 0.0;
-                    self.stage = AccStage::Idle;
-                }
-                self.value
-            }
+        if !self.active {
+            return 0.0;
         }
+        self.cap *= self.decay_coef;
+        self.output += self.lp_alpha * (self.cap - self.output);
+        let scaled = (self.output * Self::PEAK_NORM).min(1.0);
+        if self.cap < 1.0e-5 && self.output < 1.0e-5 {
+            self.cap = 0.0;
+            self.output = 0.0;
+            self.active = false;
+        }
+        scaled
     }
 
     pub fn is_active(&self) -> bool {
-        self.stage != AccStage::Idle
+        self.active
     }
 }
 

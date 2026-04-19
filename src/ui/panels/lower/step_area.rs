@@ -112,7 +112,16 @@ pub fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
             pattern.steps[i].rest = !pattern.steps[i].rest;
             pattern_dirty = true;
             kbd.set_selected_step(i);
-        } else if resp.drag_started() || resp.dragged() || resp.clicked() {
+        } else if resp.drag_started() || resp.clicked() {
+            // Only react to the initial press/release here. egui latches
+            // `resp.dragged()` to the source cell across the whole drag,
+            // and `interact_pointer_pos()` returns the *current* pointer
+            // position — so if we ran this on every dragged frame, the
+            // source step's pitch would keep updating to whatever y the
+            // pointer is at, even after the user has moved horizontally
+            // onto other cells. The cross-cell `draw_active`/`primary_down`
+            // block below handles all subsequent drag updates by reading
+            // the cell the pointer is *actually* over.
             if resp.drag_started() {
                 ui.ctx().data_mut(|d| d.insert_temp(ids::draw_active(), true));
             }
@@ -325,6 +334,22 @@ pub fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
                 );
                 p.rect_stroke(sr, 2.0, Stroke::new(1.5, Color32::from_rgb(180, 60, 60)), egui::StrokeKind::Outside);
             }
+        }
+
+        // Note name — small label between the slider bottom and the
+        // step number row so the pitch is always readable at a glance,
+        // not just via tooltip. Hidden for rests and inactive steps.
+        if !inactive && !step.rest {
+            let semi_clamped = (step.semitone as f32)
+                .clamp(SEMI_LO_ABS, SEMI_HI_ABS) as u8;
+            p.text(
+                Pos2::new(cx, top + SLD_Y1 + 4.5),
+                egui::Align2::CENTER_CENTER,
+                midi_note_name(semi_clamped),
+                egui::FontId::new(6.5, egui::FontFamily::Monospace),
+                if step.accent { Color32::from_rgb(220, 130, 110) }
+                else { Color32::from_rgb(150, 150, 160) },
+            );
         }
 
         // Step number

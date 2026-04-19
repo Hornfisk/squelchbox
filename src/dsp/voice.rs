@@ -171,6 +171,13 @@ pub struct Voice303 {
     osc_ac_x1: f32,
     osc_ac_y1: f32,
     osc_ac_r: f32,
+    /// Post-VCF HPF state. Cutoff scales with resonance to strip the
+    /// bass swell that the feedback-path DC blocker injects at high Q —
+    /// matches the cascaded post-ladder HPs in the real 303 that strip
+    /// the extra bass before the output jack. (See "too bassy at high
+    /// reso" feedback.)
+    post_hp_x1: f32,
+    post_hp_y1: f32,
 }
 
 impl Voice303 {
@@ -204,6 +211,8 @@ impl Voice303 {
             osc_ac_x1: 0.0,
             osc_ac_y1: 0.0,
             osc_ac_r: (-std::f32::consts::TAU * 30.0 / sample_rate).exp(),
+            post_hp_x1: 0.0,
+            post_hp_y1: 0.0,
         }
     }
 
@@ -227,6 +236,8 @@ impl Voice303 {
         self.oversampler.reset();
         self.osc_ac_x1 = 0.0;
         self.osc_ac_y1 = 0.0;
+        self.post_hp_x1 = 0.0;
+        self.post_hp_y1 = 0.0;
     }
 
     /// Select the oversampling tier. Called from `plugin.rs::initialize`
@@ -401,6 +412,20 @@ impl Voice303 {
             // any future enum extensions.
             QualityMode::High | QualityMode::Ultra => self.tick_oversampled_filter(),
         };
+
+        // Post-VCF HPF — cutoff scales with resonance to strip the bass
+        // swell that the feedback DC-blocker injects at high Q. At reso=0
+        // it's effectively a 30 Hz DC blocker; at reso=1 it climbs to
+        // ~250 Hz, which is enough to bring the bass back into balance
+        // with mids/highs without thinning unaccented passages.
+        // Quadratic so low-Q settings stay clean and the comp only
+        // engages when resonance is actually opening the bass swell.
+        let post_fc = 30.0 + self.resonance * self.resonance * 220.0;
+        let post_r = (-std::f32::consts::TAU * post_fc / self.sample_rate).exp();
+        let hp_y = post_r * (self.post_hp_y1 + filtered - self.post_hp_x1);
+        self.post_hp_x1 = filtered;
+        self.post_hp_y1 = hp_y;
+        let filtered = hp_y;
 
         // Output stage: models the 303's VCA transistor, which
         // compresses asymmetrically. The bias makes the positive half
