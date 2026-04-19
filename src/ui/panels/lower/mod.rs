@@ -22,7 +22,7 @@ pub fn draw_lower_panel(
 ) {
     let top = rect.top();
     left_strip::draw_left_strip(ui, setter, params, kbd, rect);
-    pitch_row::draw_pitch_buttons(ui, rect);
+    pitch_row::draw_pitch_buttons(ui, kbd, rect);
     step_area::draw_step_area(ui, kbd, rect);
     transpose::draw_transpose_section(ui, kbd, rect);
     right_strip::draw_right_strip(ui, setter, params, kbd, rect);

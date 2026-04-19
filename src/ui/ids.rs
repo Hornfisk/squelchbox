@@ -56,6 +56,9 @@ pub fn tap()             -> egui::Id { egui::Id::new("sqb_tap") }
 pub fn dump_midi()       -> egui::Id { egui::Id::new("sqb_dump_midi") }
 pub fn tap_history()     -> egui::Id { egui::Id::new("sqb_tap_history") }
 pub fn draw_active()     -> egui::Id { egui::Id::new("sqb_draw_active") }
+pub fn ui_scale_btn()    -> egui::Id { egui::Id::new("sqb_ui_scale_btn") }
+pub fn view_oct_dn()     -> egui::Id { egui::Id::new("sqb_view_oct_dn") }
+pub fn view_oct_up()     -> egui::Id { egui::Id::new("sqb_view_oct_up") }
 
 // ─── Indexed IDs (steps, knobs, banks) ───────────────────────────────
 

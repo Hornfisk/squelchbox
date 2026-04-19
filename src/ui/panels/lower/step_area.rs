@@ -16,9 +16,14 @@ pub fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
     let selected = kbd.selected_step();
 
     let slider_h = SLD_Y1 - SLD_Y0;
-    const SEMI_LO: f32 = 24.0;
-    const SEMI_HI: f32 = 60.0;
-    let semi_range = SEMI_HI - SEMI_LO;
+    // Absolute pitch bounds (kept for clamping & keyboard shortcuts).
+    const SEMI_LO_ABS: f32 = 24.0;
+    const SEMI_HI_ABS: f32 = 60.0;
+    // Visible pitch window (12-semi span, inclusive both ends).
+    let view_oct = kbd.view_oct() as f32;
+    let win_lo: f32 = SEMI_LO_ABS + view_oct * 12.0;
+    let win_hi: f32 = win_lo + 12.0;
+    let win_range: f32 = win_hi - win_lo;
     let mut pattern_dirty = false;
 
     // Click-drag draw state: when a drag starts on any step cell, set
@@ -113,8 +118,8 @@ pub fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
             }
             if let Some(pos) = resp.interact_pointer_pos() {
                 let t = ((pos.y - (top + SLD_Y0)) / slider_h).clamp(0.0, 1.0);
-                let semi = (SEMI_HI - t * semi_range).round() as i32;
-                pattern.steps[i].semitone = semi.clamp(SEMI_LO as i32, SEMI_HI as i32) as u8;
+                let semi = (win_hi - t * win_range).round() as i32;
+                pattern.steps[i].semitone = semi.clamp(win_lo as i32, win_hi as i32) as u8;
                 pattern.steps[i].rest = false;
                 pattern_dirty = true;
                 kbd.set_selected_step(i);
@@ -134,8 +139,8 @@ pub fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
                 let y_in_slider = pos.y - (top + SLD_Y0);
                 if y_in_slider >= -4.0 && y_in_slider <= slider_h + 4.0 {
                     let t = (y_in_slider / slider_h).clamp(0.0, 1.0);
-                    let semi = (SEMI_HI - t * semi_range).round() as i32;
-                    pattern.steps[i].semitone = semi.clamp(SEMI_LO as i32, SEMI_HI as i32) as u8;
+                    let semi = (win_hi - t * win_range).round() as i32;
+                    pattern.steps[i].semitone = semi.clamp(win_lo as i32, win_hi as i32) as u8;
                     pattern.steps[i].rest = false;
                     pattern_dirty = true;
                     kbd.set_selected_step(i);
@@ -167,10 +172,17 @@ pub fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
             });
             if dp != 0 {
                 let cur = if pattern.steps[sel].rest { 36 } else { pattern.steps[sel].semitone as i32 };
-                let next = (cur + dp).clamp(SEMI_LO as i32, SEMI_HI as i32);
+                let next = (cur + dp).clamp(SEMI_LO_ABS as i32, SEMI_HI_ABS as i32);
                 pattern.steps[sel].semitone = next as u8;
                 pattern.steps[sel].rest = false;
                 pattern_dirty = true;
+                // Auto-shift the view window so the edited pitch stays visible.
+                let next_f = next as f32;
+                if next_f < win_lo {
+                    kbd.nudge_view_oct(-1);
+                } else if next_f > win_hi {
+                    kbd.nudge_view_oct(1);
+                }
                 if t_held {
                     let velocity = if pattern.steps[sel].accent { 0.95 } else { 0.7 };
                     kbd.push(KbdEvent { on: true, note: next as u8, velocity });
@@ -262,13 +274,28 @@ pub fn draw_step_area(ui: &mut egui::Ui, kbd: &KbdQueue, rect: Rect) {
         p.rect_stroke(track, 1.5, Stroke::new(0.5, INK), egui::StrokeKind::Inside);
 
         if !step.rest {
-            let semi = (step.semitone as f32).clamp(SEMI_LO, SEMI_HI);
-            let t = 1.0 - (semi - SEMI_LO) / semi_range;
-            let thumb_y = top + SLD_Y0 + t * slider_h;
-            let thumb = Rect::from_center_size(Pos2::new(cx, thumb_y), Vec2::new(STEP_CELL - 6.0, 7.0));
-            p.rect_filled(thumb.translate(Vec2::new(0.0, 1.0)), 2.0, SILVER_SHADOW);
-            p.rect_filled(thumb, 2.0, if step.accent { RED_DARK } else { SILVER_MID });
-            p.rect_stroke(thumb, 2.0, Stroke::new(0.8, SILVER_LIGHT), egui::StrokeKind::Outside);
+            let semi_abs = (step.semitone as f32).clamp(SEMI_LO_ABS, SEMI_HI_ABS);
+            if semi_abs < win_lo {
+                // Below visible window — render a small ▼ marker at the bottom of the cell.
+                let arrow_pos = Pos2::new(cx, top + SLD_Y1 - 4.0);
+                p.text(arrow_pos, egui::Align2::CENTER_BOTTOM, "▼",
+                    egui::FontId::new(10.0, egui::FontFamily::Monospace),
+                    if step.accent { RED } else { INSET_TEXT });
+            } else if semi_abs > win_hi {
+                // Above visible window — render a small ▲ marker at the top of the cell.
+                let arrow_pos = Pos2::new(cx, top + SLD_Y0 + 4.0);
+                p.text(arrow_pos, egui::Align2::CENTER_TOP, "▲",
+                    egui::FontId::new(10.0, egui::FontFamily::Monospace),
+                    if step.accent { RED } else { INSET_TEXT });
+            } else {
+                // In-window: render the thumb at its pitch position.
+                let t = 1.0 - (semi_abs - win_lo) / win_range;
+                let thumb_y = top + SLD_Y0 + t * slider_h;
+                let thumb = Rect::from_center_size(Pos2::new(cx, thumb_y), Vec2::new(STEP_CELL - 6.0, 7.0));
+                p.rect_filled(thumb.translate(Vec2::new(0.0, 1.0)), 2.0, SILVER_SHADOW);
+                p.rect_filled(thumb, 2.0, if step.accent { RED_DARK } else { SILVER_MID });
+                p.rect_stroke(thumb, 2.0, Stroke::new(0.8, SILVER_LIGHT), egui::StrokeKind::Outside);
+            }
         }
 
         if i % 4 == 0 && i > 0 {

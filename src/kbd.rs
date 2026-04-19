@@ -58,6 +58,10 @@ pub struct KbdQueue {
     /// Currently-selected step in the editor (0..=15), or `u32::MAX`
     /// for no selection. Keyboard shortcuts route to this step when set.
     pub selected_step: AtomicU32,
+    /// Sequencer pitch-window octave (0..=2). Window covers
+    /// 13 semis from `24 + view_oct*12` to `36 + view_oct*12` inclusive.
+    /// Notes outside the window render as ▲/▼ markers.
+    pub view_oct: AtomicU8,
 }
 
 impl Default for KbdQueue {
@@ -78,6 +82,7 @@ impl Default for KbdQueue {
             seq_current_step: AtomicU64::new(0),
             seq_step_phase: AtomicU32::new(0),
             selected_step: AtomicU32::new(0),
+            view_oct: AtomicU8::new(2),
         }
     }
 }
@@ -271,6 +276,20 @@ impl KbdQueue {
 
     pub fn clear_selected_step(&self) {
         self.selected_step.store(u32::MAX, Ordering::Relaxed);
+    }
+
+    pub fn view_oct(&self) -> u8 {
+        self.view_oct.load(Ordering::Relaxed)
+    }
+
+    pub fn set_view_oct(&self, o: u8) {
+        self.view_oct.store(o.min(2), Ordering::Relaxed);
+    }
+
+    pub fn nudge_view_oct(&self, delta: i8) {
+        let cur = self.view_oct.load(Ordering::Relaxed) as i8;
+        let next = (cur + delta).clamp(0, 2) as u8;
+        self.view_oct.store(next, Ordering::Relaxed);
     }
 
     pub fn audio_sync_pattern(&self, dst: &mut Pattern) -> bool {
