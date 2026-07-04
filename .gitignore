@@ -8,3 +8,6 @@
 .cargo/*
 !.cargo/config.toml
 .superpowers/
+
+# drawdio editor scratch state (runtime)
+*.drawdio.json
